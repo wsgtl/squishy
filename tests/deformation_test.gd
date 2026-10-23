@@ -113,6 +113,47 @@ func check_press_feel() -> void:
 	advance(5.0)
 	check(max_offset() < 0.001, "Dent and global squash both recover")
 
+func measure_rebound(strength: float, save_images: bool = false) -> Dictionary:
+	blob.reset_deformation()
+	var mesh_node: Node3D = blob._external_mesh_instance
+	var rest: Vector3 = blob._model_center + Vector3.UP * blob._model_size.y * 0.4
+	blob.begin_interaction(mesh_node.to_global(rest), true, rest, Vector3.UP)
+	blob.update_stretch_vector(mesh_node.global_basis * Vector3.RIGHT * blob._model_radius * strength / blob.stretch_sensitivity)
+	advance(0.8)
+	blob.end_interaction()
+	var peaks: Array[float] = []
+	var previous: float = blob._signed_stretch() / blob._model_radius
+	var falling := true
+	var shortened := false
+	var thickened := false
+	for frame in range(720):
+		blob._physics_process(1.0 / 120.0)
+		var amount: float = blob._signed_stretch() / blob._model_radius
+		if falling and amount > previous and previous < -0.005:
+			peaks.append(-previous)
+			if peaks.size() == 1:
+				var left: Vector3 = blob._model_center - Vector3.RIGHT * blob._model_radius
+				var right: Vector3 = blob._model_center + Vector3.RIGHT * blob._model_radius
+				var span: float = (right + blob._target_offset_for(right)).x - (left + blob._target_offset_for(left)).x
+				shortened = span < blob._model_radius * 1.9
+				thickened = section_width(0.0) > blob._model_radius * 0.42
+			if save_images and peaks.size() <= 3:
+				await screenshot("rebound-" + str(peaks.size()))
+		falling = amount < previous
+		previous = amount
+	return {"peaks": peaks, "shortened": shortened, "thickened": thickened}
+
+func check_rebound() -> void:
+	var short_pull: Dictionary = await measure_rebound(0.8)
+	var long_pull: Dictionary = await measure_rebound(2.4, true)
+	var peaks: Array = long_pull.peaks
+	check(peaks.size() >= 3, "Stretch release produces at least three compression rebounds")
+	if peaks.size() >= 3:
+		check(peaks[0] > peaks[1] and peaks[1] > peaks[2] and peaks[2] > 0.04, "Three visible rebound peaks progressively decay")
+		check(not short_pull.peaks.is_empty() and peaks[0] > short_pull.peaks[0] * 2.5, "Longer stretch produces proportionally stronger rebound")
+	check(long_pull.shortened and long_pull.thickened, "Rebound overshoots into shorter and thicker than rest")
+	check(max_offset() < 0.001, "Multiple rebounds eventually settle at original shape")
+
 func screenshot(label: String) -> void:
 	if not capture:
 		return
@@ -276,6 +317,7 @@ func _run() -> void:
 	await process_frame
 	await check_press_feel()
 	check_neck_profile()
+	await check_rebound()
 	for recovery in [0.3, 4.0]:
 		blob.recovery_time = recovery
 		blob.elasticity = 1.0

@@ -67,6 +67,8 @@ var _press_amount := 0.0
 var _press_velocity := 0.0
 var _smooth_pull := Vector3.ZERO
 var _pull_velocity := Vector3.ZERO
+var _stretch_recovering := false
+var _rebound_axis := Vector3.RIGHT
 var _source_arrays: Array = []
 var _source_material: Material
 var _normal_sign := -1.0
@@ -263,14 +265,21 @@ func update_stretch_vector(world_offset: Vector3) -> void:
 		return
 	var mesh_node: Node3D = _external_mesh_instance if _external_mesh_instance != null else self
 	_pull_offset = (mesh_node.global_basis.inverse() * world_offset * stretch_sensitivity).limit_length(max_stretch * _model_radius)
+	if _pull_offset.length() > _model_radius * 0.00001:
+		_stretch_recovering = false
 
 func update_interaction(world_point: Vector3) -> void:
 	if _interaction_mode == MODE_STRETCH:
 		_pull_offset = ((_to_mesh_local(world_point) - _drag_origin) * stretch_sensitivity).limit_length(max_stretch * _model_radius)
+		if _pull_offset.length() > _model_radius * 0.00001:
+			_stretch_recovering = false
 
 func end_interaction() -> void:
 	if _interaction_mode < 0:
 		return
+	if _interaction_mode == MODE_STRETCH and _smooth_pull.length() > _model_radius * 0.00001 and not _stretch_recovering:
+		_rebound_axis = _smooth_pull.normalized()
+		_stretch_recovering = true
 	_interaction_mode = -1
 	_pull_offset = Vector3.ZERO
 	_is_recovering = true
@@ -292,6 +301,7 @@ func _trigger_vibration() -> void:
 			Input.start_joy_vibration(0, vibration_strength, vibration_strength, vibration_strength * 0.2)
 
 func reset_deformation() -> void:
+	_stretch_recovering = false
 	_press_elapsed = 0.0
 	_interaction_mode = -1
 	_is_recovering = false
@@ -319,6 +329,10 @@ func _physics_process(delta: float) -> void:
 	var active := _interaction_mode >= 0
 	var omega := 24.0 if active else 8.0 / maxf(recovery_time, 0.3)
 	var damping_ratio := 0.9 if active else clampf(1.0 - elasticity * 0.55 - initial_bounce * 0.2, 0.35, 1.0)
+	# Three oscillation periods per recovery_time, with a decaying envelope.
+	# Press recovery keeps its softer response; only released stretch rings.
+	var pull_omega := TAU * 3.0 / maxf(recovery_time, 0.3) if not active and _stretch_recovering else omega
+	var pull_damping := clampf(0.23 - elasticity * 0.09 - initial_bounce * 0.02, 0.12, 0.23) if not active and _stretch_recovering else damping_ratio
 	var follow := 1.0 - exp(-22.0 * minf(delta, 0.1))
 	_anchor_point = _anchor_point.lerp(_anchor_target, follow)
 	var next_normal := _anchor_normal.lerp(_normal_target, follow)
@@ -334,7 +348,7 @@ func _physics_process(delta: float) -> void:
 	for step in range(steps):
 		_press_velocity += (omega * omega * (press_target - _press_amount) - 2.0 * damping_ratio * omega * _press_velocity) * dt
 		_press_amount += _press_velocity * dt
-		_pull_velocity += (omega * omega * (pull_target - _smooth_pull) - 2.0 * damping_ratio * omega * _pull_velocity) * dt
+		_pull_velocity += (pull_omega * pull_omega * (pull_target - _smooth_pull) - 2.0 * pull_damping * pull_omega * _pull_velocity) * dt
 		_smooth_pull += _pull_velocity * dt
 	if not active:
 		_recover_timer += delta
@@ -344,6 +358,12 @@ func _physics_process(delta: float) -> void:
 	_cpu_dirty = true
 	_pick_dirty = true
 	_sync_gpu()
+
+func _deformation_axis() -> Vector3:
+	return _rebound_axis if _stretch_recovering else _smooth_pull.normalized()
+
+func _signed_stretch() -> float:
+	return _smooth_pull.dot(_deformation_axis())
 
 func _target_offset_for(rest_position: Vector3) -> Vector3:
 	var relative := rest_position - _anchor_point
@@ -360,13 +380,16 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 	var squash := clampf(_press_amount * squash_strength, -0.04, 0.18)
 	var spread := 1.0 / sqrt(1.0 - squash) - 1.0
 	offset += Vector3((rest_position.x - _model_center.x) * spread, -(rest_position.y - bottom) * squash, (rest_position.z - _model_center.z) * spread)
-	var pull_length := _smooth_pull.length()
-	if pull_length > _model_radius * 0.00001:
-		var direction := _smooth_pull / pull_length
+	var pull_length := _signed_stretch()
+	if absf(pull_length) > _model_radius * 0.00001:
+		var direction := _deformation_axis()
 		var centered := rest_position - _model_center
 		# Long pulls concentrate strain in a smooth central neck. The ends retain
 		# their volume, and a positive cross-section keeps the neck connected.
-		var factor := 1.0 + pull_length / (_model_radius * 2.0)
+		var strain := pull_length / (_model_radius * 2.0)
+		# Negative strain compresses along the original axis and expands across
+		# it. Exponential compression remains positive even after a long pull.
+		var factor := 1.0 + strain if strain >= 0.0 else maxf(0.35, exp(strain))
 		var neck_strength := smoothstep(0.65, 2.6, pull_length / _model_radius)
 		var half_extent := maxf(direction.abs().dot(_model_size * 0.5), _model_radius * 0.01)
 		var along := centered.dot(direction)
@@ -519,3 +542,5 @@ func _sync_gpu() -> void:
 	_shader_material.set_shader_parameter("softness", softness)
 	_shader_material.set_shader_parameter("squash_strength", squash_strength)
 	_shader_material.set_shader_parameter("pull", _smooth_pull)
+	_shader_material.set_shader_parameter("stretch_axis", _deformation_axis())
+	_shader_material.set_shader_parameter("stretch_amount", _signed_stretch())

@@ -17,6 +17,8 @@ uniform float finger_width = 0.23;
 uniform float softness = 0.9;
 uniform float squash_strength = 0.10;
 uniform vec3 pull = vec3(0.0);
+uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
+uniform float stretch_amount = 0.0;
 
 vec3 deform(vec3 p) {
 	vec3 relative = p - anchor_point;
@@ -33,11 +35,12 @@ vec3 deform(vec3 p) {
 	float squash = clamp(press_amount * squash_strength, -0.04, 0.18);
 	float spread = inversesqrt(1.0 - squash) - 1.0;
 	offset += vec3((p.x - model_center.x) * spread, -(p.y - bottom) * squash, (p.z - model_center.z) * spread);
-	float pull_length = length(pull);
-	if (pull_length > model_radius * 0.00001) {
-		vec3 direction = pull / pull_length;
+	float pull_length = stretch_amount;
+	if (abs(pull_length) > model_radius * 0.00001) {
+		vec3 direction = stretch_axis;
 		vec3 centered = p - model_center;
-		float factor = 1.0 + pull_length / (model_radius * 2.0);
+		float strain = pull_length / (model_radius * 2.0);
+		float factor = strain >= 0.0 ? 1.0 + strain : max(0.35, exp(strain));
 		float neck_strength = smoothstep(0.65, 2.6, pull_length / model_radius);
 		float half_extent = max(dot(abs(direction), model_size * 0.5), model_radius * 0.01);
 		float along = dot(centered, direction);
