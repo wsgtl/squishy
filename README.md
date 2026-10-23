@@ -1,15 +1,17 @@
 # 捏捏实验室（Godot Web 原型）
 
-这是一个面向浏览器运行的 3D 捏捏小游戏基础框架。当前原型用程序网格生成软胶球，以鼠标或触屏命中球面，再对球面局部施加按压或拉伸位移；松开后顶点弹簧将形状带回静止网格。它用于验证交互与手感，后续可以替换模型、材质和场景美术。
+这是一个 Godot 4.7 的 Web 捏捏原型，当前加载 `glb/ss.glb` 寿司模型。按压产生局部凹陷，拖动产生大范围拉长与横向收缩，松手后阻尼弹簧恢复形状。
 
-## 运行
+## 运行与操作
 
-- 使用 Godot 4.7 打开本目录中的 `project.godot`，按 F6/F5 运行。
-- 左键按住球面：局部按压；移动指针时按压点跟随。
-- 右键拖动或按住 Shift 再左键拖动：拉伸球面。
-- 触屏按住：按压；拖动超过阈值后切换为拉伸。
-- 调节左上角力度滑杆，或点击右上角“恢复形状”。
-- 项目使用 Compatibility 渲染器和 GodotPhysics3D，避免 WebGL 2 不支持的渲染功能及 Jolt Web 导出限制。
+- 使用 Godot 4.7 打开 `project.godot`，按 F5 运行。
+- 鼠标左键或单指按住、拖动模型：仅按压 / 推揉，按压点随拖动移动。
+- 电脑端仅 Shift + 左键拖动触发拉伸；松开 Shift 停止拉伸，右键不触发拉伸。
+- 触屏在模型上放下两指并向外分开：拉伸。两指一起平移不拉伸，任意一指抬起后恢复单指按压。
+- 拉出模型轮廓后仍可继续拖动；支持上下、左右方向。
+- 松开后自动回弹；拖动空白处旋转模型。
+- 左上角“参数”调整按压深度、手指宽度、柔软度、回弹和拉伸。
+- 镜头随拉伸幅度退让；“镜头后退”设为 0 可关闭。
 
 ## Web 导出
 
@@ -30,40 +32,31 @@
 │   └── main.tscn            # 主场景；挂载主控制脚本
 ├── scripts/
 │   ├── main.gd              # 场景搭建、镜头灯光、输入拾取和 HUD
-│   └── blob_deformer.gd     # 程序球网格、弹簧形变和网格法线更新
+│   └── blob_deformer.gd     # 网格拾取、弹簧形变场和法线更新
 └── output/web/              # Web 导出产物（HTML/JS/WASM/PCK）
 ```
 
 `.godot/` 是编辑器导入缓存，`.uid` 是 Godot 脚本资源标识；它们由 Godot 管理，不是手写的游戏逻辑。`output/web/` 中若已有导出文件，它们是构建产物，重新导出会覆盖对应文件。
 
-## 软体交互与物理近似
+## 形变实现
 
-当前效果是**基于网格顶点弹簧的软体近似**，不是 `RigidBody3D` 的刚体碰撞，也不是完整有限元软体求解。碰撞球只负责确定指针命中的世界坐标；可见表面由独立的 `ArrayMesh` 顶点实时变形。
+1. **真实表面拾取**：按下时射线与当前变形后的三角面相交，返回命中位置、静止形状中的重心插值位置和法线。计算先按模型半径归一化，避免小尺寸 GLB 受几何精度阈值影响。旧碰撞体不再参与交互拾取。
+2. **稳定拖拽**：经过命中点建立朝向相机的拖拽平面，随后只与该平面求交。抓取期间冻结投影姿态，避免镜头退让制造额外位移。
+3. **按压**：接触法线方向下陷，切平面高斯权重形成碗状凹陷，外围轻微隆起，沿深度衰减以减少对背面的影响。
+4. **拉伸**：大范围沿拖动方向伸长，垂直方向按伸长倍率平方根的倒数收缩，叠加宽范围的抓取权重。大幅拉伸时应变逐渐集中到中段，形成中间细、两端宽的收腰；横截面比例保留至少 16%，不会主动断开。拉伸上限按模型半径计量。该收缩是视觉近似，不是完整体积约束。
+5. **回弹**：对形变场的强度和拉伸向量积分，使用最多 1/120 秒的子步。相同位置始终得到相同位移，避免独立顶点弹簧撕开 UV 接缝。重新抓取时携带并渐渐释放已有形变。静止后停止计算。
+6. **渲染**：复用 ArrayMesh，保留原材质、UV 和其他顶点通道，重算几何法线。法线按实际三角形绕序定向，并使用适合小模型的退化阈值。
 
-1. **建立静止网格**：`BlobDeformer._build_mesh_data()` 按经纬度生成球面顶点、UV 和三角形索引，并从三角形提取每个顶点的邻接关系。静止顶点保存在 `_rest_positions`。
-2. **屏幕拾取**：`main.gd` 用 `Camera3D.project_ray_origin()` 和 `Camera3D.project_ray_normal()` 构造视线，再由 `PhysicsRayQueryParameters3D.create()` 与 `World3D.direct_space_state.intersect_ray()` 命中 `StaticBody3D` 上的 `SphereShape3D`。射线命中坐标作为交互锚点。
-3. **局部按压**：命中点转换到模型局部空间并取方向向量。每个顶点根据与锚点的夹角计算高斯权重；按压目标沿径向向内移动，外围加入较小的正向鼓包，形成软胶受压的凹陷与挤出感。按住移动时更新锚点。
-4. **拉伸**：右键、Shift+左键或触屏拖动切换到拉伸模式。连续命中点的局部位移累加成 `_pull_offset`，再按顶点到锚点的高斯权重施加到局部表面，并用 `pull_limit` 限制最大拖拽量。
-5. **回弹与平滑**：每个 `Node3D._physics_process(delta)` 中以显式弹簧积分更新顶点速度和位置：弹簧力将当前偏移拉向交互目标，阻尼力消耗速度；邻点平滑项减弱尖锐折痕。平滑项减去静止网格本身的离散曲率，避免网格无形变时因拉普拉斯项整体收缩。松手后目标回到静止位置，阻尼让网格振荡衰减。
-6. **刷新表面**：重算三角面法线并归一化，将顶点、法线、UV、索引放入 `Mesh.ARRAY_*` 数组，调用 `ArrayMesh.clear_surfaces()` 和 `ArrayMesh.add_surface_from_arrays()` 更新渲染网格。
+主要文件：`scripts/main.gd` 负责输入、相机和 HUD；`scripts/blob_deformer.gd` 负责拾取、形变和网格更新。
 
-### 使用的 Godot API
+当前支持单指按压、双指拉伸和模型的第一个 MeshInstance / surface；本项目的寿司及青蛙模型都是单网格、单 surface。没有自碰撞、刚体交互或严格体积保持。复杂多部件模型的大幅形变仍可能出现局部穿插，移动浏览器性能需要在目标设备上实测。
 
-| API | 用途 |
-| --- | --- |
-| `Node3D._physics_process(delta)` | 以物理帧率推进顶点弹簧积分 |
-| `InputEventMouseButton`、`InputEventMouseMotion` | 桌面鼠标按压、拖动与模式选择 |
-| `InputEventScreenTouch`、`InputEventScreenDrag` | 触屏按压与拖动 |
-| `Camera3D.project_ray_origin()`、`project_ray_normal()` | 从屏幕坐标建立 3D 拾取射线 |
-| `PhysicsRayQueryParameters3D.create()` | 配置物理射线查询 |
-| `World3D.direct_space_state.intersect_ray()` | 查询指针命中的碰撞体和世界坐标 |
-| `StaticBody3D`、`CollisionShape3D`、`SphereShape3D` | 提供稳定的球面拾取碰撞体 |
-| `ArrayMesh`、`Mesh.ARRAY_VERTEX/NORMAL/TEX_UV/INDEX` | 构造并逐帧刷新程序化可变形网格 |
-| `MeshInstance3D`、`StandardMaterial3D` | 渲染形变网格和舞台材质 |
-| `CanvasLayer`、`Control`、`HSlider`、`Button` | 创建跟随视口的 HUD、力度控制和复位按钮 |
+## 验证
 
-### 参数调节
+```sh
+godot --headless --path . --script tests/deformation_test.gd
+```
 
-在 `blob_deformer.gd` 中可调：`spring_stiffness` 控制回弹速度，`spring_damping` 控制振荡衰减，`neighbor_stiffness` 控制表面平滑，`press_depth` 控制按压深度，`pull_limit` 限制拉伸位移，`latitude_segments` 与 `longitude_segments` 控制网格精度。提高网格精度会增加每帧法线重算和网格重建的成本，Web 端应先在目标设备上测量。
+验证真实模型拾取、鼠标及触屏事件、轮廓外拖动、竖直拉伸、GUI 捕获、镜头稳定性、回弹和参数极值。图形环境可追加 `-- --capture`，保存静止、按压、拉伸和恢复截图到 `/tmp/nienie-*.png`。
 
-若需要更可信的体积保持、复杂材料和多点接触，下一阶段可在 GPU shader 中实现位移，或改用经过验证的软体物理方案；此时也应让拾取碰撞体随实际形状更新。目前碰撞球保持静止，因此这是用于可玩原型的视觉形变，而不是可与场景中其他刚体精确碰撞的实体软体。
+修改源码后必须重新导出 Web；已有服务器不会自动获得本地代码修改。

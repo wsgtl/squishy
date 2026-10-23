@@ -4,21 +4,25 @@ const BlobScript = preload("res://scripts/blob_deformer.gd")
 
 var _camera: Camera3D
 var _blob: BlobDeformer
+var _model_root: Node3D
 var _dragging := false
 var _stretching := false
 var _active_button := MOUSE_BUTTON_LEFT
 var _pointer_position := Vector2.ZERO
 var _active_touch_id := -1
-var _touch_origin := Vector2.ZERO
-var _touch_anchor := Vector3.ZERO
+var _touches: Dictionary = {}
+var _pinch_start_distance := 0.0
+var _press_pointer_dirty := false
+var _drag_plane := Plane()
+var _drag_camera_transform := Transform3D.IDENTITY
 
 # 相机控制
 var _camera_target_dist: float = 4.5
 var _camera_target_y: float = 2.8
 var _camera_current_dist: float = 4.5
 var _camera_current_y: float = 2.8
-var _camera_azimuth: float = 0.0
-var _camera_polar: float = 0.55
+var _camera_azimuth: float = PI * 0.5
+var _camera_polar: float = 0.85
 var _is_rotating := false
 var _last_mouse_pos := Vector2.ZERO
 
@@ -50,92 +54,148 @@ func _load_font() -> void:
 		_cjk_font = FontFile.new()
 		_cjk_font.font_path = "res://fonts/NotoSansSC-Regular.ttf"
 
+# Capture an already-owned gesture before GUI dispatch so releasing over the
+# parameter panel cannot leave the model stuck. New gestures still respect UI.
+func _input(event: InputEvent) -> void:
+	if not _dragging and not _is_rotating and _active_touch_id < 0:
+		return
+	if event is InputEventMouseButton and _active_touch_id < 0:
+		if not event.pressed and event.button_index == _active_button:
+			_finish_gesture()
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and _active_touch_id < 0:
+		if _dragging and _stretching != event.shift_pressed:
+			_switch_mouse_mode(event.shift_pressed)
+		_move_pointer(event.position)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.keycode == KEY_SHIFT and _active_touch_id < 0 and _dragging:
+		_switch_mouse_mode(event.pressed)
+	elif event is InputEventScreenTouch and _touches.has(event.index):
+		if not event.pressed:
+			_touches.erase(event.index)
+			if _touches.is_empty():
+				_finish_gesture()
+			else:
+				# Either finger can lift first. The survivor resumes pressing.
+				_active_touch_id = int(_touches.keys()[0])
+				if _dragging:
+					_end_pointer()
+				_is_rotating = false
+				_begin_pointer(_touches[_active_touch_id], false, MOUSE_BUTTON_LEFT)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag and _touches.has(event.index):
+		_touches[event.index] = event.position
+		if _touches.size() == 1:
+			_move_pointer(event.position)
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
+	# A second finger must start on the model and outside GUI controls.
+	if event is InputEventScreenTouch and event.pressed and _touches.size() == 1 and _dragging:
+		if not _raycast_blob(event.position).is_empty() and not _raycast_blob(_touches[_active_touch_id]).is_empty():
+			_touches[event.index] = event.position
+			_begin_pointer(_touches[_active_touch_id], true, MOUSE_BUTTON_LEFT)
+			_pinch_start_distance = _touch_separation().length()
+		return
+	if _dragging or _is_rotating or _active_touch_id >= 0:
+		return
+	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				# 先检测是否点击到模型
-				var hit := _raycast_blob(event.position)
-				if not hit.is_empty():
-					# 点击到模型，开始按压或拉伸
-					var stretch: bool = Input.is_key_pressed(KEY_SHIFT) or event.button_index == MOUSE_BUTTON_RIGHT
-					_begin_pointer(event.position, stretch, MOUSE_BUTTON_LEFT)
-				else:
-					# 点击空白处，开始旋转
-					_is_rotating = true
-					_last_mouse_pos = event.position
-			else:
-				if _dragging:
-					_end_pointer()
-				if _is_rotating:
-					_is_rotating = false
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			if event.pressed:
-				var hit := _raycast_blob(event.position)
-				if not hit.is_empty():
-					_begin_pointer(event.position, true, MOUSE_BUTTON_RIGHT)
-			else:
-				if _dragging:
-					_end_pointer()
-	elif event is InputEventMouseMotion:
-		if _is_rotating:
-			var delta: Vector2 = event.position - _last_mouse_pos
-			_camera_azimuth -= delta.x * 0.008
-			_camera_polar += delta.y * 0.005
-			_camera_polar = clampf(_camera_polar, 0.2, 1.2)
-			_update_camera_position()
-			_last_mouse_pos = event.position
-		elif _dragging:
-			_pointer_position = event.position
-	elif event is InputEventScreenTouch:
-		if event.pressed and _active_touch_id < 0:
-			_active_touch_id = event.index
-			_touch_origin = event.position
-			var hit := _raycast_blob(event.position)
-			if not hit.is_empty():
-				_begin_pointer(event.position, false, MOUSE_BUTTON_LEFT)
-				_touch_anchor = hit.position
-			else:
+			_active_button = event.button_index
+			_begin_pointer(event.position, event.shift_pressed, event.button_index)
+			if not _dragging:
 				_is_rotating = true
 				_last_mouse_pos = event.position
-		elif not event.pressed and event.index == _active_touch_id:
-			if _dragging:
-				_end_pointer()
-			_is_rotating = false
-			_active_touch_id = -1
-	elif event is InputEventScreenDrag and event.index == _active_touch_id:
-		if _is_rotating:
-			var delta: Vector2 = event.position - _last_mouse_pos
-			_camera_azimuth -= delta.x * 0.008
-			_camera_polar += delta.y * 0.005
-			_camera_polar = clampf(_camera_polar, 0.2, 1.2)
-			_update_camera_position()
+	elif event is InputEventScreenTouch and event.pressed:
+		_active_touch_id = event.index
+		_touches[event.index] = event.position
+		_begin_pointer(event.position, false, MOUSE_BUTTON_LEFT)
+		if not _dragging:
+			_is_rotating = true
 			_last_mouse_pos = event.position
-		elif _dragging:
-			_pointer_position = event.position
-			if not _stretching and event.position.distance_to(_touch_origin) > 22.0:
-				_stretching = true
-				_blob.begin_interaction(_touch_anchor, true)
+
+func _switch_mouse_mode(stretch: bool) -> void:
+	var point := _pointer_position
+	_end_pointer()
+	_begin_pointer(point, stretch, MOUSE_BUTTON_LEFT)
+
+func _move_pointer(screen_position: Vector2) -> void:
+	if _is_rotating:
+		_rotate_model(screen_position - _last_mouse_pos)
+		_last_mouse_pos = screen_position
+		return
+	_pointer_position = screen_position
+	if not _dragging and _touches.size() == 1:
+		_begin_pointer(screen_position, false, MOUSE_BUTTON_LEFT)
+	if _dragging and not _stretching:
+		_press_pointer_dirty = true
+
+func _finish_gesture() -> void:
+	if _dragging:
+		_end_pointer()
+	_is_rotating = false
+	_active_touch_id = -1
+	_touches.clear()
+
+func _plane_point(screen_position: Vector2) -> Variant:
+	var correction := _drag_camera_transform * _camera.global_transform.affine_inverse()
+	var origin := correction * _camera.project_ray_origin(screen_position)
+	var direction := correction.basis * _camera.project_ray_normal(screen_position)
+	return _drag_plane.intersects_ray(origin, direction)
+
+func _touch_separation() -> Vector3:
+	var ids := _touches.keys()
+	if ids.size() != 2:
+		return Vector3.ZERO
+	var a: Variant = _plane_point(_touches[ids[0]])
+	var b: Variant = _plane_point(_touches[ids[1]])
+	return b - a if a != null and b != null else Vector3.ZERO
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_finish_gesture()
 
 func _physics_process(delta: float) -> void:
-	_camera_current_dist = lerp(_camera_current_dist, _camera_target_dist, delta * 4.0)
-	_camera_current_y = lerp(_camera_current_y, _camera_target_y, delta * 4.0)
+	_camera_current_dist = lerpf(_camera_current_dist, _camera_target_dist, minf(delta * 4.0, 1.0))
+	_camera_current_y = lerpf(_camera_current_y, _camera_target_y, minf(delta * 4.0, 1.0))
 	_update_camera_position()
-	
 	if not _dragging:
 		return
-	var hit := _raycast_blob(_pointer_position)
-	if not hit.is_empty():
-		_blob.update_interaction(hit.position)
+	if not _stretching:
+		if _press_pointer_dirty:
+			_press_pointer_dirty = false
+			# Rest-surface BVH avoids chasing the moving dent. Coalesce all OS
+			# pointer events into at most one native query per physics frame.
+			var hit := _raycast_blob(_pointer_position, true)
+			if not hit.is_empty():
+				_blob.update_press(hit.rest_point, hit.local_normal)
+		return
+	# Frozen projection prevents camera retreat from changing gesture distance.
+	if _touches.size() == 2:
+		var separation := _touch_separation()
+		var extension := maxf(0.0, separation.length() - _pinch_start_distance)
+		_blob.update_stretch_vector(separation.normalized() * extension)
+	else:
+		var point: Variant = _plane_point(_pointer_position)
+		if point != null:
+			_blob.update_interaction(point)
+	var amount := _blob.get_stretch_amount()
+	_camera_target_dist = _base_camera_dist * (1.0 + _camera_retract * amount * 0.5)
+	_camera_target_y = _look_at_target.y + _camera_target_dist * sin(_camera_polar)
 
 func _update_camera_position() -> void:
 	if _camera == null:
 		return
-	var x := _camera_current_dist * sin(_camera_polar) * cos(_camera_azimuth)
-	var z := _camera_current_dist * sin(_camera_polar) * sin(_camera_azimuth)
+	var x := _camera_current_dist * cos(_camera_polar) * cos(_camera_azimuth)
+	var z := _camera_current_dist * cos(_camera_polar) * sin(_camera_azimuth)
 	var y := _camera_current_y
-	_camera.position = Vector3(x, y, z)
+	_camera.position = Vector3(_look_at_target.x + x, y, _look_at_target.z + z)
 	_camera.look_at(_look_at_target, Vector3.UP)
+
+func _rotate_model(delta: Vector2) -> void:
+	if _model_root == null:
+		return
+	_model_root.rotate_y(delta.x * 0.008)
 
 func _begin_pointer(screen_position: Vector2, stretch: bool, button: int) -> void:
 	var hit := _raycast_blob(screen_position)
@@ -145,7 +205,10 @@ func _begin_pointer(screen_position: Vector2, stretch: bool, button: int) -> voi
 	_stretching = stretch
 	_active_button = button
 	_pointer_position = screen_position
-	_blob.begin_interaction(hit.position, stretch)
+	_press_pointer_dirty = false
+	_drag_camera_transform = _camera.global_transform
+	_drag_plane = Plane(_camera.global_basis.z.normalized(), hit.position)
+	_blob.begin_interaction(hit.position, stretch, hit.rest_point, hit.local_normal)
 	
 	if stretch:
 		_camera_target_dist = _base_camera_dist * (1.0 + _camera_retract * 0.12)
@@ -157,18 +220,16 @@ func _end_pointer() -> void:
 	_camera_target_dist = _base_camera_dist
 	_camera_target_y = _base_camera_y
 
-func _raycast_blob(screen_position: Vector2) -> Dictionary:
+func _raycast_blob(screen_position: Vector2, stable_surface: bool = false) -> Dictionary:
 	if _camera == null or _blob == null:
 		return {}
 	var origin := _camera.project_ray_origin(screen_position)
 	var direction := _camera.project_ray_normal(screen_position)
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 100.0)
-	query.collision_mask = 1
-	query.collide_with_areas = false
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty() or hit.collider != _blob.get_collision_body():
-		return {}
-	return hit
+	if stable_surface and _dragging:
+		var correction := _drag_camera_transform * _camera.global_transform.affine_inverse()
+		origin = correction * origin
+		direction = correction.basis * direction
+	return _blob.pick_ray(origin, direction, stable_surface)
 
 func _build_environment() -> void:
 	var world_environment := WorldEnvironment.new()
@@ -186,8 +247,8 @@ func _build_environment() -> void:
 	_camera.position = Vector3(0.0, 2.8, 4.5)
 	_camera.fov = 50.0
 	_camera.current = true
-	_camera.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
 	add_child(_camera)
+	_camera.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
 
 	# 主光源 - 降低强度
 	var key_light := DirectionalLight3D.new()
@@ -269,6 +330,7 @@ func _build_blob() -> void:
 		var model_scale := 6.0
 		instance.scale = Vector3(model_scale, model_scale, model_scale)
 		add_child(instance)
+		_model_root = instance
 		
 		# 计算模型 AABB 来确定正确位置
 		var aabb := _get_model_aabb(instance)
@@ -277,6 +339,7 @@ func _build_blob() -> void:
 		instance.position = Vector3(0.0, board_top_y - model_bottom_y, 0.0)
 		
 		_auto_focus_camera(instance)
+		_update_camera_position()
 		_resize_board()
 		
 		var mesh_instance := _find_first_mesh_instance(instance)
@@ -300,9 +363,7 @@ func _get_model_aabb(model_root: Node) -> AABB:
 	while not nodes.is_empty():
 		var node: Node = nodes.pop_back()
 		if node is MeshInstance3D:
-			var mesh_aabb: AABB = node.get_aabb()
-			var global_pos: Vector3 = node.global_position
-			mesh_aabb.position += global_pos
+			var mesh_aabb: AABB = node.global_transform * node.get_aabb()
 			if first:
 				aabb = mesh_aabb
 				first = false
@@ -328,9 +389,7 @@ func _auto_focus_camera(model_root: Node) -> void:
 	while not nodes.is_empty():
 		var node: Node = nodes.pop_back()
 		if node is MeshInstance3D:
-			var mesh_aabb: AABB = node.get_aabb()
-			var global_pos: Vector3 = node.global_position
-			mesh_aabb.position += global_pos
+			var mesh_aabb: AABB = node.global_transform * node.get_aabb()
 			if first:
 				aabb = mesh_aabb
 				first = false
@@ -349,15 +408,15 @@ func _auto_focus_camera(model_root: Node) -> void:
 	var aspect := _camera.get_viewport().get_visible_rect().size.x / _camera.get_viewport().get_visible_rect().size.y
 	
 	# 竖屏时水平视野更窄，需要根据宽度计算距离
-	var dist_by_height := (size.y * 0.55) / tan_half_fov
-	var dist_by_width := (size.x * 0.55) / (tan_half_fov * aspect)
+	var dist_by_height := (maxf(size.y, size.z) * 0.8) / tan_half_fov
+	var dist_by_width := (maxf(size.x, size.z) * 0.8) / (tan_half_fov * aspect)
 	var dist := maxf(dist_by_height, dist_by_width)
-	dist = maxf(dist, 2.0)
+	dist = maxf(dist, 0.5)
 	dist = minf(dist, 30.0)
 	
 	_camera_target_dist = dist
 	_camera_current_dist = dist
-	_camera_target_y = center.y + dist * 0.4
+	_camera_target_y = center.y + dist * sin(_camera_polar)
 	_camera_current_y = _camera_target_y
 	_base_camera_dist = dist
 	_base_camera_y = _camera_target_y
@@ -368,7 +427,7 @@ func _build_hud() -> void:
 	add_child(layer)
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_PASS
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(root)
 
 	_param_button = Button.new()
@@ -405,7 +464,7 @@ func _build_hud() -> void:
 	var desc_label := _make_label("软胶形变 · Web 原型", 14, Color("#e6c8a1"))
 	content.add_child(desc_label)
 	
-	var help_label := _make_label("按住左键：按压 / 推揉\nShift + 拖动或右键拖动：拉伸\n拖动空白处：旋转模型\n触屏：按住挤压，拖动手指拉伸", 14, Color("#fff7eb"))
+	var help_label := _make_label("左键拖动：按压 / 推揉\nShift + 左键拖动：拉伸\n拖动空白处：旋转模型\n触屏：单指按压，双指分开拉伸", 14, Color("#fff7eb"))
 	content.add_child(help_label)
 
 	# 回弹时长
@@ -438,11 +497,11 @@ func _build_hud() -> void:
 	softness_slider.value_changed.connect(_on_softness_changed)
 	softness_row.add_child(softness_slider)
 
-	# 下限深度
+	# 按压深度
 	var depth_row := HBoxContainer.new()
 	depth_row.add_theme_constant_override("separation", 10)
 	content.add_child(depth_row)
-	depth_row.add_child(_make_label("下限深度", 14, Color("#fff2dc")))
+	depth_row.add_child(_make_label("按压深度", 14, Color("#fff2dc")))
 	var depth_slider := HSlider.new()
 	depth_slider.min_value = 0.1
 	depth_slider.max_value = 0.5
@@ -559,7 +618,8 @@ func _build_hud() -> void:
 	vibration_row.add_child(vibration_slider)
 
 	var footer := Label.new()
-	footer.text = "软体原型 · 顶点弹簧 · 松手后自动回弹"
+	footer.text = "单指 / 左键按压 · 双指 / Shift 拉伸"
+	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	footer.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	footer.offset_left = 0.0
 	footer.offset_top = -42.0
