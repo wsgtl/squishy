@@ -3,134 +3,159 @@ extends Node3D
 const BlobScript = preload("res://scripts/blob_deformer.gd")
 
 var _camera: Camera3D
-var _blob: Node3D
+var _blob: BlobDeformer
 var _dragging := false
 var _stretching := false
-var _rotating := false
 var _active_button := MOUSE_BUTTON_LEFT
 var _pointer_position := Vector2.ZERO
-var _last_rotation_x := 0.0
 var _active_touch_id := -1
 var _touch_origin := Vector2.ZERO
 var _touch_anchor := Vector3.ZERO
-var _last_screen_pos := Vector2.ZERO
-var _base_camera_dist := 0.0
-var _base_camera_y := 0.0
-var _camera_target_dist := 0.0
-var _camera_target_y := 0.0
-var _param_panel: PanelContainer
-var _cjk_font: SystemFont
 
+# 相机控制
+var _camera_target_dist: float = 4.5
+var _camera_target_y: float = 2.8
+var _camera_current_dist: float = 4.5
+var _camera_current_y: float = 2.8
+var _camera_azimuth: float = 0.0
+var _camera_polar: float = 0.55
+var _is_rotating := false
+var _last_mouse_pos := Vector2.ZERO
+
+# 参数面板
+var _param_panel: Control
+var _param_button: Button
+var _param_visible := false
+
+# 镜头后退程度 (0-1.5, 默认1)
+var _camera_retract: float = 1.0
+var _base_camera_dist: float = 4.5
+var _base_camera_y: float = 2.8
+var _look_at_target := Vector3(0.0, 1.0, 0.0)
+var _board: MeshInstance3D
+
+# 字体
+var _cjk_font: FontFile
 
 func _ready() -> void:
+	_load_font()
 	_build_environment()
 	_build_stage()
-	_build_blob_from_glb()
+	_build_blob()
 	_build_hud()
-	_auto_focus_camera.call_deferred()
 
+func _load_font() -> void:
+	_cjk_font = load("res://fonts/NotoSansSC-Regular.ttf")
+	if _cjk_font == null:
+		_cjk_font = FontFile.new()
+		_cjk_font.font_path = "res://fonts/NotoSansSC-Regular.ttf"
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT or event.button_index == MOUSE_BUTTON_RIGHT:
+		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				_begin_pointer(event.position, event.button_index == MOUSE_BUTTON_RIGHT or Input.is_key_pressed(KEY_SHIFT), event.button_index)
-			elif (_dragging or _rotating) and event.button_index == _active_button:
-				_end_pointer()
-	elif event is InputEventMouseMotion and (_dragging or _rotating):
-		_pointer_position = event.position
+				# 先检测是否点击到模型
+				var hit := _raycast_blob(event.position)
+				if not hit.is_empty():
+					# 点击到模型，开始按压或拉伸
+					var stretch: bool = Input.is_key_pressed(KEY_SHIFT) or event.button_index == MOUSE_BUTTON_RIGHT
+					_begin_pointer(event.position, stretch, MOUSE_BUTTON_LEFT)
+				else:
+					# 点击空白处，开始旋转
+					_is_rotating = true
+					_last_mouse_pos = event.position
+			else:
+				if _dragging:
+					_end_pointer()
+				if _is_rotating:
+					_is_rotating = false
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			if event.pressed:
+				var hit := _raycast_blob(event.position)
+				if not hit.is_empty():
+					_begin_pointer(event.position, true, MOUSE_BUTTON_RIGHT)
+			else:
+				if _dragging:
+					_end_pointer()
+	elif event is InputEventMouseMotion:
+		if _is_rotating:
+			var delta: Vector2 = event.position - _last_mouse_pos
+			_camera_azimuth -= delta.x * 0.008
+			_camera_polar += delta.y * 0.005
+			_camera_polar = clampf(_camera_polar, 0.2, 1.2)
+			_update_camera_position()
+			_last_mouse_pos = event.position
+		elif _dragging:
+			_pointer_position = event.position
 	elif event is InputEventScreenTouch:
 		if event.pressed and _active_touch_id < 0:
 			_active_touch_id = event.index
 			_touch_origin = event.position
-			_begin_pointer(event.position, false, MOUSE_BUTTON_LEFT)
 			var hit := _raycast_blob(event.position)
 			if not hit.is_empty():
+				_begin_pointer(event.position, false, MOUSE_BUTTON_LEFT)
 				_touch_anchor = hit.position
+			else:
+				_is_rotating = true
+				_last_mouse_pos = event.position
 		elif not event.pressed and event.index == _active_touch_id:
-			_end_pointer()
+			if _dragging:
+				_end_pointer()
+			_is_rotating = false
 			_active_touch_id = -1
 	elif event is InputEventScreenDrag and event.index == _active_touch_id:
-		_pointer_position = event.position
-		if not _stretching and not _rotating and event.position.distance_to(_touch_origin) > 22.0:
-			_stretching = true
-			if _blob is BlobDeformer:
-				(_blob as BlobDeformer).begin_interaction(_touch_anchor, true)
-
+		if _is_rotating:
+			var delta: Vector2 = event.position - _last_mouse_pos
+			_camera_azimuth -= delta.x * 0.008
+			_camera_polar += delta.y * 0.005
+			_camera_polar = clampf(_camera_polar, 0.2, 1.2)
+			_update_camera_position()
+			_last_mouse_pos = event.position
+		elif _dragging:
+			_pointer_position = event.position
+			if not _stretching and event.position.distance_to(_touch_origin) > 22.0:
+				_stretching = true
+				_blob.begin_interaction(_touch_anchor, true)
 
 func _physics_process(delta: float) -> void:
-	if _rotating:
-		var delta_x: float = _pointer_position.x - _last_rotation_x
-		_last_rotation_x = _pointer_position.x
-		if _blob != null:
-			_blob.rotate_y(-delta_x * 0.01)
-		_update_camera_follow(delta)
-		return
+	_camera_current_dist = lerp(_camera_current_dist, _camera_target_dist, delta * 4.0)
+	_camera_current_y = lerp(_camera_current_y, _camera_target_y, delta * 4.0)
+	_update_camera_position()
+	
 	if not _dragging:
-		_update_camera_follow(delta)
 		return
-	if not (_blob is BlobDeformer):
+	var hit := _raycast_blob(_pointer_position)
+	if not hit.is_empty():
+		_blob.update_interaction(hit.position)
+
+func _update_camera_position() -> void:
+	if _camera == null:
 		return
-	if _stretching:
-		var screen_delta := _pointer_position - _last_screen_pos
-		_last_screen_pos = _pointer_position
-		var bd: BlobDeformer = _blob as BlobDeformer
-		bd.update_stretch_by_screen(screen_delta, _camera)
-		var stretch_ratio := bd._pull_offset.length() / maxf(bd._model_radius, 0.001)
-		var zoom_extra := bd.camera_zoom_back * stretch_ratio * 0.15
-		_camera_target_dist = _base_camera_dist * (1.0 + zoom_extra)
-		_camera_target_y = _base_camera_y * (1.0 + zoom_extra * 0.3)
-	else:
-		var hit := _raycast_blob(_pointer_position)
-		if not hit.is_empty():
-			(_blob as BlobDeformer).update_interaction(hit.position)
-		_camera_target_dist = _base_camera_dist
-		_camera_target_y = _base_camera_y
-	_update_camera_follow(delta)
-
-
-func _update_camera_follow(delta: float) -> void:
-	if _camera == null or _blob == null:
-		return
-	var blob_pos: Vector3 = _blob.position
-	var cur_dist := _camera.position.z - blob_pos.z
-	var cur_y := _camera.position.y
-	var new_dist := lerpf(cur_dist, _camera_target_dist, clampf(delta * 4.0, 0.0, 1.0))
-	var new_y := lerpf(cur_y, _camera_target_y, clampf(delta * 4.0, 0.0, 1.0))
-	_camera.position = Vector3(blob_pos.x, new_y, blob_pos.z + new_dist)
-	_camera.look_at(blob_pos + Vector3(0.0, 0.35, 0.0), Vector3.UP)
-
+	var x := _camera_current_dist * sin(_camera_polar) * cos(_camera_azimuth)
+	var z := _camera_current_dist * sin(_camera_polar) * sin(_camera_azimuth)
+	var y := _camera_current_y
+	_camera.position = Vector3(x, y, z)
+	_camera.look_at(_look_at_target, Vector3.UP)
 
 func _begin_pointer(screen_position: Vector2, stretch: bool, button: int) -> void:
 	var hit := _raycast_blob(screen_position)
 	if hit.is_empty():
-		_rotating = true
-		_active_button = button
-		_pointer_position = screen_position
-		_last_rotation_x = screen_position.x
 		return
 	_dragging = true
 	_stretching = stretch
 	_active_button = button
 	_pointer_position = screen_position
-	_last_screen_pos = screen_position
-	if _blob is BlobDeformer:
-		(_blob as BlobDeformer).begin_interaction(hit.position, stretch)
-
+	_blob.begin_interaction(hit.position, stretch)
+	
+	if stretch:
+		_camera_target_dist = _base_camera_dist * (1.0 + _camera_retract * 0.12)
 
 func _end_pointer() -> void:
 	_dragging = false
 	_stretching = false
-	_rotating = false
+	_blob.end_interaction()
 	_camera_target_dist = _base_camera_dist
 	_camera_target_y = _base_camera_y
-	if _blob is BlobDeformer:
-		var bd: BlobDeformer = _blob as BlobDeformer
-		bd.end_interaction()
-		var vib := bd.vibration_strength
-		if vib > 0.01:
-			Input.vibrate_handheld(vib * 0.4)
-
 
 func _raycast_blob(screen_position: Vector2) -> Dictionary:
 	if _camera == null or _blob == null:
@@ -141,203 +166,204 @@ func _raycast_blob(screen_position: Vector2) -> Dictionary:
 	query.collision_mask = 1
 	query.collide_with_areas = false
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty():
+	if hit.is_empty() or hit.collider != _blob.get_collision_body():
 		return {}
 	return hit
-
 
 func _build_environment() -> void:
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color("#d4b896")
+	environment.background_color = Color("#8b6f47")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#f5e6d3")
-	environment.ambient_light_energy = 0.15
+	environment.ambient_light_color = Color("#7a5c3a")
+	environment.ambient_light_energy = 0.25
 	world_environment.environment = environment
 	add_child(world_environment)
 
 	_camera = Camera3D.new()
 	_camera.name = "MainCamera"
-	_camera.position = Vector3(0.0, 1.8, 3.5)
-	_camera.fov = 45.0
-	_camera.near = 0.05
-	_camera.far = 100.0
+	_camera.position = Vector3(0.0, 2.8, 4.5)
+	_camera.fov = 50.0
 	_camera.current = true
+	_camera.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
 	add_child(_camera)
-	_camera.look_at(Vector3(0.0, 0.35, 0.0), Vector3.UP)
 
+	# 主光源 - 降低强度
 	var key_light := DirectionalLight3D.new()
 	key_light.name = "WarmKeyLight"
-	key_light.rotation_degrees = Vector3(-65.0, -25.0, 0.0)
-	key_light.light_color = Color("#fff5e6")
-	key_light.light_energy = 0.35
+	key_light.rotation_degrees = Vector3(-55.0, -20.0, 0.0)
+	key_light.light_color = Color("#ffe8c8")
+	key_light.light_energy = 0.8
 	key_light.shadow_enabled = true
-	key_light.shadow_bias = 0.05
 	add_child(key_light)
 
+	# 补光 - 减少阴影
 	var fill_light := DirectionalLight3D.new()
-	fill_light.name = "FrontFillLight"
-	fill_light.rotation_degrees = Vector3(-30.0, 10.0, 0.0)
-	fill_light.light_color = Color("#ffffff")
-	fill_light.light_energy = 0.15
+	fill_light.name = "FillLight"
+	fill_light.rotation_degrees = Vector3(-30.0, 45.0, 0.0)
+	fill_light.light_color = Color("#fff5e6")
+	fill_light.light_energy = 0.4
 	fill_light.shadow_enabled = false
 	add_child(fill_light)
 
-	var top_light := DirectionalLight3D.new()
-	top_light.name = "TopLight"
-	top_light.rotation_degrees = Vector3(-85.0, 0.0, 0.0)
-	top_light.light_color = Color("#fffaf0")
-	top_light.light_energy = 0.08
-	top_light.shadow_enabled = false
-	add_child(top_light)
-
+	# 前部柔光
+	var front_light := DirectionalLight3D.new()
+	front_light.name = "FrontLight"
+	front_light.rotation_degrees = Vector3(-10.0, 0.0, 0.0)
+	front_light.light_color = Color("#ffffff")
+	front_light.light_energy = 0.3
+	front_light.shadow_enabled = false
+	add_child(front_light)
 
 func _build_stage() -> void:
 	var ground := MeshInstance3D.new()
 	var ground_mesh := PlaneMesh.new()
-	ground_mesh.size = Vector2(50.0, 50.0)
+	ground_mesh.size = Vector2(200.0, 200.0)
 	ground.mesh = ground_mesh
 	var ground_material := StandardMaterial3D.new()
-	ground_material.albedo_color = Color("#d4b896")
+	ground_material.albedo_color = Color("#c9a87c")
 	ground_material.roughness = 0.92
 	ground.material_override = ground_material
-	ground.position.y = -0.65
+	ground.position.y = -0.035
 	add_child(ground)
 
-	var board := MeshInstance3D.new()
+	# 底座 - 占满竖屏宽度再超出20%
+	_board = MeshInstance3D.new()
 	var board_mesh := CylinderMesh.new()
-	board_mesh.top_radius = 1.6
-	board_mesh.bottom_radius = 1.6
-	board_mesh.height = 0.12
+	board_mesh.height = 0.26
 	board_mesh.radial_segments = 64
-	board.mesh = board_mesh
+	_board.mesh = board_mesh
 	var board_material := StandardMaterial3D.new()
-	board_material.albedo_color = Color("#e8d4b8")
-	board_material.roughness = 0.75
-	board.material_override = board_material
-	board.position.y = -0.57
-	add_child(board)
+	board_material.albedo_color = Color("#d4a76a")
+	board_material.roughness = 0.68
+	_board.material_override = board_material
+	_board.position.y = 0.12
+	add_child(_board)
+	_resize_board()
 
-
-func _build_blob_from_glb() -> void:
-	var glb_scene = load("res://glb/ss.glb")
-	if glb_scene == null:
-		push_error("无法加载 GLB 模型: res://glb/ss.glb")
+func _resize_board() -> void:
+	if _board == null or _camera == null:
 		return
-	_blob = glb_scene.instantiate() as Node3D
-	_blob.name = "SoftBlobGLB"
-	_blob.scale = Vector3(14.0, 14.0, 14.0)
-	_blob.position = Vector3(0.0, -0.35, 0.0)
-	_reduce_material_emission(_blob)
+	var board_y := _board.position.y
+	var screen_width_world := _calculate_screen_width_at_y(board_y)
+	var board_radius := screen_width_world * 0.6
+	var board_mesh := _board.mesh as CylinderMesh
+	if board_mesh != null:
+		board_mesh.top_radius = board_radius
+		board_mesh.bottom_radius = board_radius
 
-	var mesh_instance := _find_first_mesh_instance(_blob)
-	if mesh_instance != null:
-		var blob_script := load("res://scripts/blob_deformer.gd")
-		_blob.set_script(blob_script)
-		(_blob as BlobDeformer).set_external_mesh(mesh_instance)
+func _calculate_screen_width_at_y(y: float) -> float:
+	if _camera == null:
+		return 3.0
+	var dist := absf(_camera.position.y - y)
+	var half_fov_rad := deg_to_rad(_camera.fov * 0.5)
+	var aspect := _camera.get_viewport().get_visible_rect().size.x / _camera.get_viewport().get_visible_rect().size.y
+	# 竖屏时水平视野更窄
+	return dist * tan(half_fov_rad) * 2.0 * aspect
+
+func _build_blob() -> void:
+	var glb_scene := load("res://glb/ss.glb")
+	if glb_scene != null:
+		var instance = glb_scene.instantiate()
+		var model_scale := 6.0
+		instance.scale = Vector3(model_scale, model_scale, model_scale)
+		add_child(instance)
+		
+		# 计算模型 AABB 来确定正确位置
+		var aabb := _get_model_aabb(instance)
+		var model_bottom_y := aabb.position.y
+		var board_top_y := 0.12 + 0.13  # 底座位置 + 半高
+		instance.position = Vector3(0.0, board_top_y - model_bottom_y, 0.0)
+		
+		_auto_focus_camera(instance)
+		_resize_board()
+		
+		var mesh_instance := _find_first_mesh_instance(instance)
+		if mesh_instance != null:
+			_blob = BlobScript.new() as BlobDeformer
+			_blob.name = "SoftBlob"
+			_blob.position = instance.position
+			_blob.set_external_mesh(mesh_instance)
+			add_child(_blob)
+			return
+	
+	_blob = BlobScript.new() as BlobDeformer
+	_blob.name = "SoftBlob"
+	_blob.position = Vector3(0.0, 1.08, 0.0)
 	add_child(_blob)
 
-
-func _auto_focus_camera() -> void:
-	if _blob == null or _camera == null:
-		return
-	await get_tree().process_frame
-	var aabb: AABB = _get_model_aabb(_blob)
-	if aabb.size == Vector3.ZERO:
-		push_error("无法计算模型 AABB，使用默认相机位置")
-		_camera.position = Vector3(0.0, 2.0, 4.0)
-		_camera.look_at(Vector3.ZERO, Vector3.UP)
-		return
-	var model_center: Vector3 = aabb.position + aabb.size * 0.5
-	var board_radius := 1.6
-	var board_width := board_radius * 2.0
-	var width_fraction := 1.5
-	var fov_rad: float = deg_to_rad(_camera.fov)
-	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
-	var aspect_ratio: float = viewport_size.x / viewport_size.y
-	var tan_hfov_half := tan(fov_rad * 0.5) * aspect_ratio
-	var required_depth := (board_width * 0.5) / (tan_hfov_half * width_fraction)
-	var height_ratio := 0.7
-	var sqrt_term := sqrt(height_ratio * height_ratio + 1.0)
-	var board_y := -0.57
-	var distance_needed := required_depth / sqrt_term - (model_center.y - board_y) / height_ratio
-	distance_needed = maxf(distance_needed, 1.5)
-	distance_needed = clampf(distance_needed, 1.5, 12.0)
-	var zoom_factor := 1.0
-	if _blob is BlobDeformer:
-		zoom_factor = 1.0 + (_blob as BlobDeformer).camera_zoom_back * 0.5
-	distance_needed *= zoom_factor
-	var camera_y_offset: float = distance_needed * height_ratio
-	var camera_y: float = model_center.y + camera_y_offset
-	_camera.position = Vector3(model_center.x, camera_y, model_center.z + distance_needed)
-	_camera.look_at(model_center, Vector3.UP)
-	_base_camera_dist = distance_needed
-	_base_camera_y = camera_y
-	_camera_target_dist = distance_needed
-	_camera_target_y = camera_y
-	print("自动对焦完成: 中心=", model_center, " 模型尺寸=", aabb.size, " 距离=", distance_needed)
-
+func _get_model_aabb(model_root: Node) -> AABB:
+	var aabb := AABB()
+	var first := true
+	var nodes: Array[Node] = [model_root]
+	while not nodes.is_empty():
+		var node: Node = nodes.pop_back()
+		if node is MeshInstance3D:
+			var mesh_aabb: AABB = node.get_aabb()
+			var global_pos: Vector3 = node.global_position
+			mesh_aabb.position += global_pos
+			if first:
+				aabb = mesh_aabb
+				first = false
+			else:
+				aabb = aabb.merge(mesh_aabb)
+		nodes.append_array(node.get_children())
+	return aabb
 
 func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 	if node is MeshInstance3D:
-		return node as MeshInstance3D
+		return node
 	for child in node.get_children():
 		var result := _find_first_mesh_instance(child)
 		if result != null:
 			return result
 	return null
 
-
-func _reduce_material_emission(node: Node) -> void:
-	if node is MeshInstance3D:
-		var mi: MeshInstance3D = node as MeshInstance3D
-		if mi.material_override is StandardMaterial3D:
-			var mat: StandardMaterial3D = mi.material_override
-			mat.emission_energy = 0.0
-		if mi.mesh != null:
-			for i in range(mi.mesh.get_surface_count()):
-				var surf_mat: Material = mi.mesh.surface_get_material(i)
-				if surf_mat is StandardMaterial3D:
-					(surf_mat as StandardMaterial3D).emission_energy = 0.0
-	for child in node.get_children():
-		_reduce_material_emission(child)
-
-
-func _get_model_aabb(node: Node3D) -> AABB:
-	var combined_aabb: AABB
-	var has_valid_aabb: bool = false
-	if node is MeshInstance3D:
-		var mesh_instance: MeshInstance3D = node as MeshInstance3D
-		if mesh_instance.mesh != null:
-			var mesh_aabb: AABB = mesh_instance.mesh.get_aabb()
-			var global_xform: Transform3D = mesh_instance.global_transform
-			var transformed_aabb: AABB = global_xform * mesh_aabb
-			if not has_valid_aabb:
-				combined_aabb = transformed_aabb
-				has_valid_aabb = true
+func _auto_focus_camera(model_root: Node) -> void:
+	var aabb := AABB()
+	var first := true
+	
+	var nodes: Array[Node] = [model_root]
+	while not nodes.is_empty():
+		var node: Node = nodes.pop_back()
+		if node is MeshInstance3D:
+			var mesh_aabb: AABB = node.get_aabb()
+			var global_pos: Vector3 = node.global_position
+			mesh_aabb.position += global_pos
+			if first:
+				aabb = mesh_aabb
+				first = false
 			else:
-				combined_aabb = combined_aabb.merge(transformed_aabb)
-	for child in node.get_children():
-		if child is Node3D:
-			var child_aabb: AABB = _get_model_aabb(child as Node3D)
-			if child_aabb.size != Vector3.ZERO:
-				if not has_valid_aabb:
-					combined_aabb = child_aabb
-					has_valid_aabb = true
-				else:
-					combined_aabb = combined_aabb.merge(child_aabb)
-	return combined_aabb
-
+				aabb = aabb.merge(mesh_aabb)
+		nodes.append_array(node.get_children())
+	
+	if first:
+		return
+	
+	var center := aabb.get_center()
+	var size := aabb.size
+	
+	var fov_rad := deg_to_rad(_camera.fov)
+	var tan_half_fov := tan(fov_rad * 0.5)
+	var aspect := _camera.get_viewport().get_visible_rect().size.x / _camera.get_viewport().get_visible_rect().size.y
+	
+	# 竖屏时水平视野更窄，需要根据宽度计算距离
+	var dist_by_height := (size.y * 0.55) / tan_half_fov
+	var dist_by_width := (size.x * 0.55) / (tan_half_fov * aspect)
+	var dist := maxf(dist_by_height, dist_by_width)
+	dist = maxf(dist, 2.0)
+	dist = minf(dist, 30.0)
+	
+	_camera_target_dist = dist
+	_camera_current_dist = dist
+	_camera_target_y = center.y + dist * 0.4
+	_camera_current_y = _camera_target_y
+	_base_camera_dist = dist
+	_base_camera_y = _camera_target_y
+	_look_at_target = center
 
 func _build_hud() -> void:
-	_cjk_font = SystemFont.new()
-	_cjk_font.font_names = PackedStringArray([
-		"PingFang SC", "Heiti SC", "Microsoft YaHei",
-		"SimHei", "Noto Sans CJK SC", "WenQuanYi Hei",
-		"sans-serif"
-	])
-
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var root := Control.new()
@@ -345,18 +371,20 @@ func _build_hud() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_PASS
 	layer.add_child(root)
 
-	var toggle_button := Button.new()
-	toggle_button.text = "参数"
-	toggle_button.position = Vector2(24.0, 24.0)
-	toggle_button.custom_minimum_size = Vector2(90.0, 40.0)
-	toggle_button.add_theme_font_override("font", _cjk_font)
-	toggle_button.add_theme_font_size_override("font_size", 15)
-	toggle_button.pressed.connect(_on_toggle_params)
-	root.add_child(toggle_button)
+	_param_button = Button.new()
+	_param_button.text = "参数"
+	_param_button.position = Vector2(24.0, 24.0)
+	_param_button.custom_minimum_size = Vector2(80.0, 40.0)
+	_param_button.add_theme_font_size_override("font_size", 16)
+	_param_button.add_theme_font_override("font", _cjk_font)
+	_param_button.pressed.connect(_toggle_param_panel)
+	_param_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(_param_button)
 
 	_param_panel = PanelContainer.new()
 	_param_panel.position = Vector2(24.0, 72.0)
-	_param_panel.custom_minimum_size = Vector2(340.0, 0.0)
+	_param_panel.custom_minimum_size = Vector2(330.0, 0.0)
+	_param_panel.visible = false
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.24, 0.16, 0.1, 0.84)
 	panel_style.set_corner_radius_all(14)
@@ -365,33 +393,170 @@ func _build_hud() -> void:
 	panel_style.content_margin_top = 14.0
 	panel_style.content_margin_bottom = 14.0
 	_param_panel.add_theme_stylebox_override("panel", panel_style)
-	_param_panel.visible = false
 	root.add_child(_param_panel)
 
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", 6)
+	content.add_theme_constant_override("separation", 7)
 	_param_panel.add_child(content)
-	content.add_child(_make_label("捏捏实验室", 22, Color("#fff2dc")))
-	content.add_child(_make_label("按住模型：按压 / 推揉\nShift + 拖动或右键拖动：拉伸\n拖动空白处：左右旋转", 13, Color("#fff7eb")))
+	
+	var title_label := _make_label("捏捏实验室", 24, Color("#fff2dc"))
+	content.add_child(title_label)
+	
+	var desc_label := _make_label("软胶形变 · Web 原型", 14, Color("#e6c8a1"))
+	content.add_child(desc_label)
+	
+	var help_label := _make_label("按住左键：按压 / 推揉\nShift + 拖动或右键拖动：拉伸\n拖动空白处：旋转模型\n触屏：按住挤压，拖动手指拉伸", 14, Color("#fff7eb"))
+	content.add_child(help_label)
 
-	content.add_child(_make_param_slider("回弹时长", "rebound_duration", 0.3, 4.0, 0.1, 1.6))
-	content.add_child(_make_param_slider("柔软度", "softness", 0.2, 1.6, 0.05, 0.9))
-	content.add_child(_make_param_slider("下限深度", "press_depth_limit", 0.1, 0.5, 0.01, 0.32))
-	content.add_child(_make_param_slider("手指宽度", "finger_width", 0.12, 0.36, 0.01, 0.23))
-	content.add_child(_make_param_slider("弹性抖动", "jelly_amount", 0.0, 1.0, 0.05, 0.55))
-	content.add_child(_make_param_slider("初始回弹", "springback_amount", 0.0, 0.6, 0.02, 0.24))
-	content.add_child(_make_param_slider("拉伸灵敏度", "stretch_sensitivity", 0.3, 2.5, 0.1, 1.3))
-	content.add_child(_make_param_slider("最大拉伸", "max_stretch", 0.8, 3.6, 0.1, 2.4))
-	content.add_child(_make_param_slider("镜头后退", "camera_zoom_back", 0.0, 1.5, 0.1, 1.0))
-	content.add_child(_make_param_slider("回弹震动", "vibration_strength", 0.0, 0.5, 0.05, 0.2))
+	# 回弹时长
+	var recovery_row := HBoxContainer.new()
+	recovery_row.add_theme_constant_override("separation", 10)
+	content.add_child(recovery_row)
+	recovery_row.add_child(_make_label("回弹时长", 14, Color("#fff2dc")))
+	var recovery_slider := HSlider.new()
+	recovery_slider.min_value = 0.3
+	recovery_slider.max_value = 4.0
+	recovery_slider.step = 0.1
+	recovery_slider.value = 1.6
+	recovery_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	recovery_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	recovery_slider.value_changed.connect(_on_recovery_changed)
+	recovery_row.add_child(recovery_slider)
 
-	var reset_button := Button.new()
-	reset_button.text = "恢复形状"
-	reset_button.custom_minimum_size = Vector2(280.0, 38.0)
-	reset_button.add_theme_font_override("font", _cjk_font)
-	reset_button.add_theme_font_size_override("font_size", 15)
-	reset_button.pressed.connect(_on_reset_pressed)
-	content.add_child(reset_button)
+	# 柔软度
+	var softness_row := HBoxContainer.new()
+	softness_row.add_theme_constant_override("separation", 10)
+	content.add_child(softness_row)
+	softness_row.add_child(_make_label("柔软度", 14, Color("#fff2dc")))
+	var softness_slider := HSlider.new()
+	softness_slider.min_value = 0.2
+	softness_slider.max_value = 1.6
+	softness_slider.step = 0.1
+	softness_slider.value = 0.9
+	softness_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	softness_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	softness_slider.value_changed.connect(_on_softness_changed)
+	softness_row.add_child(softness_slider)
+
+	# 下限深度
+	var depth_row := HBoxContainer.new()
+	depth_row.add_theme_constant_override("separation", 10)
+	content.add_child(depth_row)
+	depth_row.add_child(_make_label("下限深度", 14, Color("#fff2dc")))
+	var depth_slider := HSlider.new()
+	depth_slider.min_value = 0.1
+	depth_slider.max_value = 0.5
+	depth_slider.step = 0.01
+	depth_slider.value = 0.32
+	depth_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	depth_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	depth_slider.value_changed.connect(_on_depth_changed)
+	depth_row.add_child(depth_slider)
+
+	# 手指宽度
+	var finger_row := HBoxContainer.new()
+	finger_row.add_theme_constant_override("separation", 10)
+	content.add_child(finger_row)
+	finger_row.add_child(_make_label("手指宽度", 14, Color("#fff2dc")))
+	var finger_slider := HSlider.new()
+	finger_slider.min_value = 0.12
+	finger_slider.max_value = 0.36
+	finger_slider.step = 0.01
+	finger_slider.value = 0.23
+	finger_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	finger_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	finger_slider.value_changed.connect(_on_finger_changed)
+	finger_row.add_child(finger_slider)
+
+	# 弹性抖动
+	var elastic_row := HBoxContainer.new()
+	elastic_row.add_theme_constant_override("separation", 10)
+	content.add_child(elastic_row)
+	elastic_row.add_child(_make_label("弹性抖动", 14, Color("#fff2dc")))
+	var elastic_slider := HSlider.new()
+	elastic_slider.min_value = 0.0
+	elastic_slider.max_value = 1.0
+	elastic_slider.step = 0.05
+	elastic_slider.value = 0.55
+	elastic_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	elastic_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	elastic_slider.value_changed.connect(_on_elastic_changed)
+	elastic_row.add_child(elastic_slider)
+
+	# 初始回弹
+	var bounce_row := HBoxContainer.new()
+	bounce_row.add_theme_constant_override("separation", 10)
+	content.add_child(bounce_row)
+	bounce_row.add_child(_make_label("初始回弹", 14, Color("#fff2dc")))
+	var bounce_slider := HSlider.new()
+	bounce_slider.min_value = 0.0
+	bounce_slider.max_value = 0.6
+	bounce_slider.step = 0.05
+	bounce_slider.value = 0.24
+	bounce_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	bounce_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bounce_slider.value_changed.connect(_on_bounce_changed)
+	bounce_row.add_child(bounce_slider)
+
+	# 拉伸灵敏度
+	var sensitivity_row := HBoxContainer.new()
+	sensitivity_row.add_theme_constant_override("separation", 10)
+	content.add_child(sensitivity_row)
+	sensitivity_row.add_child(_make_label("拉伸灵敏度", 14, Color("#fff2dc")))
+	var sensitivity_slider := HSlider.new()
+	sensitivity_slider.min_value = 0.3
+	sensitivity_slider.max_value = 2.5
+	sensitivity_slider.step = 0.1
+	sensitivity_slider.value = 1.3
+	sensitivity_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	sensitivity_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sensitivity_slider.value_changed.connect(_on_sensitivity_changed)
+	sensitivity_row.add_child(sensitivity_slider)
+
+	# 最大拉伸
+	var max_stretch_row := HBoxContainer.new()
+	max_stretch_row.add_theme_constant_override("separation", 10)
+	content.add_child(max_stretch_row)
+	max_stretch_row.add_child(_make_label("最大拉伸", 14, Color("#fff2dc")))
+	var max_stretch_slider := HSlider.new()
+	max_stretch_slider.min_value = 0.8
+	max_stretch_slider.max_value = 3.6
+	max_stretch_slider.step = 0.1
+	max_stretch_slider.value = 2.4
+	max_stretch_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	max_stretch_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	max_stretch_slider.value_changed.connect(_on_max_stretch_changed)
+	max_stretch_row.add_child(max_stretch_slider)
+
+	# 镜头后退
+	var camera_row := HBoxContainer.new()
+	camera_row.add_theme_constant_override("separation", 10)
+	content.add_child(camera_row)
+	camera_row.add_child(_make_label("镜头后退", 14, Color("#fff2dc")))
+	var camera_slider := HSlider.new()
+	camera_slider.min_value = 0.0
+	camera_slider.max_value = 1.5
+	camera_slider.step = 0.1
+	camera_slider.value = 1.0
+	camera_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	camera_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	camera_slider.value_changed.connect(_on_camera_changed)
+	camera_row.add_child(camera_slider)
+
+	# 回弹震动
+	var vibration_row := HBoxContainer.new()
+	vibration_row.add_theme_constant_override("separation", 10)
+	content.add_child(vibration_row)
+	vibration_row.add_child(_make_label("回弹震动", 14, Color("#fff2dc")))
+	var vibration_slider := HSlider.new()
+	vibration_slider.min_value = 0.0
+	vibration_slider.max_value = 0.5
+	vibration_slider.step = 0.05
+	vibration_slider.value = 0.2
+	vibration_slider.custom_minimum_size = Vector2(190.0, 24.0)
+	vibration_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vibration_slider.value_changed.connect(_on_vibration_changed)
+	vibration_row.add_child(vibration_slider)
 
 	var footer := Label.new()
 	footer.text = "软体原型 · 顶点弹簧 · 松手后自动回弹"
@@ -401,51 +566,58 @@ func _build_hud() -> void:
 	footer.offset_right = 0.0
 	footer.offset_bottom = -16.0
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	footer.add_theme_font_override("font", _cjk_font)
 	footer.add_theme_font_size_override("font_size", 13)
 	footer.add_theme_color_override("font_color", Color("#735d46"))
+	footer.add_theme_font_override("font", _cjk_font)
 	root.add_child(footer)
 
-
-func _on_toggle_params() -> void:
-	if _param_panel != null:
-		_param_panel.visible = not _param_panel.visible
-
-
-func _make_param_slider(label_text: String, param_name: String, min_val: float, max_val: float, step: float, default_val: float) -> VBoxContainer:
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 2)
-	var label := _make_label(label_text, 13, Color("#e6c8a1"))
-	box.add_child(label)
-	var slider := HSlider.new()
-	slider.min_value = min_val
-	slider.max_value = max_val
-	slider.step = step
-	slider.value = default_val
-	slider.custom_minimum_size = Vector2(280.0, 22.0)
-	slider.value_changed.connect(func(v): _on_param_changed(param_name, v))
-	box.add_child(slider)
-	return box
-
+func _toggle_param_panel() -> void:
+	_param_visible = not _param_visible
+	_param_panel.visible = _param_visible
 
 func _make_label(text: String, size: int, color: Color) -> Label:
 	var label := Label.new()
 	label.text = text
-	if _cjk_font != null:
-		label.add_theme_font_override("font", _cjk_font)
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
+	label.add_theme_font_override("font", _cjk_font)
 	return label
 
+func _on_recovery_changed(value: float) -> void:
+	if _blob != null:
+		_blob.recovery_time = value
 
-func _on_param_changed(param_name: String, value: float) -> void:
-	if _blob != null and _blob is BlobDeformer:
-		(_blob as BlobDeformer).set_param(param_name, value)
-		if param_name == "camera_zoom_back":
-			_auto_focus_camera.call_deferred()
+func _on_softness_changed(value: float) -> void:
+	if _blob != null:
+		_blob.softness = value
 
+func _on_depth_changed(value: float) -> void:
+	if _blob != null:
+		_blob.min_depth = value
 
-func _on_reset_pressed() -> void:
-	if _blob != null and _blob is BlobDeformer:
-		_dragging = false
-		(_blob as BlobDeformer).reset_deformation()
+func _on_finger_changed(value: float) -> void:
+	if _blob != null:
+		_blob.finger_width = value
+
+func _on_elastic_changed(value: float) -> void:
+	if _blob != null:
+		_blob.elasticity = value
+
+func _on_bounce_changed(value: float) -> void:
+	if _blob != null:
+		_blob.initial_bounce = value
+
+func _on_sensitivity_changed(value: float) -> void:
+	if _blob != null:
+		_blob.stretch_sensitivity = value
+
+func _on_max_stretch_changed(value: float) -> void:
+	if _blob != null:
+		_blob.max_stretch = value
+
+func _on_camera_changed(value: float) -> void:
+	_camera_retract = value
+
+func _on_vibration_changed(value: float) -> void:
+	if _blob != null:
+		_blob.rebound_vibration = value
