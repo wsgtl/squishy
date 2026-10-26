@@ -221,6 +221,30 @@ func check_press_trail() -> void:
 	check(blob._trail_peak() > 0.01 and blob._trail_peak() < initial_peak, "Released trail recovers gradually rather than snapping")
 	advance(6.0)
 	check(blob._trail_points.is_empty() and max_offset() < 0.001, "Press trails completely recover and go idle")
+	# Isolate a fading trail, including its rim: passing the former denominator
+	# and trail-culling thresholds must not change the decay rate or erase it.
+	blob._add_press_trail(start, top, Vector3.UP, 1.0)
+	var probes := [start, start.lerp(top, 0.5), start + Vector3.FORWARD * blob._model_radius * blob.finger_width * 2.0]
+	var reference: Array[Vector3] = []
+	for point in probes:
+		reference.append(blob._target_offset_for(point))
+	var proportional := true
+	for strength in [0.1, 0.01, 0.001, 0.00051, 0.00049, 0.0001, 0.00001]:
+		blob._trail_amounts[0] = strength
+		blob._trail_end_amounts[0] = strength
+		for i in range(probes.size()):
+			var actual: Vector3 = blob._target_offset_for(probes[i])
+			# Floor resistance is nonlinear at full depth, so compare raw input
+			# recovered from that mapping for the vertical component.
+			var height: float = probes[i].y - (blob._model_center.y - blob._model_size.y * 0.5)
+			var raw := actual.y
+			var base := reference[i].y
+			if base < 0.0:
+				raw = height * 0.85 * log(1.0 + raw / (height * 0.85))
+				base = height * 0.85 * log(1.0 + base / (height * 0.85))
+			proportional = proportional and absf(raw / strength - base) < blob._model_radius * 0.001
+	check(proportional, "Trail center and rim fade proportionally through former cutoff thresholds")
+	blob.reset_deformation()
 	# Large per-frame motion must be swept all the way to the latest contact.
 	blob.begin_interaction(node.to_global(start), false, start, Vector3.UP)
 	check(blob._press_amount >= 0.2, "Touch-down has immediate visible pressure")
@@ -241,12 +265,43 @@ func check_press_trail() -> void:
 	blob._physics_process(1.0 / 60.0)
 	check(blob._trail_points.size() == old_count + 1 and blob._trail_points[old_count].distance_to(new_start) < 0.000001, "Separate presses never bridge unrelated strokes")
 	blob.reset_deformation()
+	# Capacity rollover must retain the oldest segment at full visibility on
+	# entry, then retire it continuously instead of dropping it in one frame.
+	for segment in range(blob.ACTIVE_TRAILS):
+		blob._stroke_has_segment = false
+		blob._trail_sample_elapsed = 1.0
+		var point := start + Vector3.FORWARD * segment * blob._model_radius * 0.1
+		blob._add_press_trail(point, point + Vector3.RIGHT * 0.05, Vector3.UP, 1.0)
+	var oldest: Vector3 = blob._trail_points[0]
+	var before: Vector3 = blob._trail_offset_at(oldest, 0)
+	blob._stroke_has_segment = false
+	blob._trail_sample_elapsed = 1.0
+	blob._add_press_trail(top, top + Vector3.RIGHT * 0.05, Vector3.UP, 1.0)
+	check(blob._trail_points.size() == blob.ACTIVE_TRAILS + 1 and blob._trail_points[0] == oldest and blob._trail_offset_at(oldest, 0).distance_to(before) < 0.000001, "Capacity rollover preserves the visible oldest trail without a jump")
+	var smooth_retirement := true
+	var previous_visibility := 1.0
+	for step in range(1, 61):
+		blob._trail_retire_times[0] = blob._trail_retire_duration() * step / 60.0
+		var visibility: float = blob._trail_visibility(0)
+		smooth_retirement = smooth_retirement and visibility <= previous_visibility and previous_visibility - visibility < 0.026
+		previous_visibility = visibility
+	check(smooth_retirement and previous_visibility < 0.000001, "Retired trail fades continuously to zero before deletion")
+	blob.reset_deformation()
 	# Repeated circular strokes on one face must stay bounded and finite.
 	blob.begin_interaction(node.to_global(top), false, top, Vector3.UP)
+	var no_visible_eviction := true
 	for frame in range(720):
+		var old_points: PackedVector3Array = blob._trail_points.duplicate()
+		var old_visibility: Array[float] = []
+		for index in range(old_points.size()):
+			old_visibility.append(blob._trail_visibility(index))
 		var angle := frame * TAU / 60.0
 		blob.update_press(top + Vector3(cos(angle), 0.0, sin(angle)) * blob._model_radius * 0.18, Vector3.UP)
 		blob._physics_process(1.0 / 60.0)
+		for index in range(old_points.size()):
+			if not blob._trail_points.has(old_points[index]):
+				no_visible_eviction = no_visible_eviction and old_visibility[index] < 0.01
+	check(no_visible_eviction and blob._trail_points.size() <= blob.MAX_TRAILS, "Continuous circles only remove fully faded history within the slot budget")
 	var bounded := true
 	var smooth_field := true
 	var epsilon: float = blob._model_radius * 0.0001

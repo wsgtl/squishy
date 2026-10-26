@@ -56,7 +56,10 @@ var _shader_material: ShaderMaterial
 var _anchor_target := Vector3.ZERO
 var _normal_target := Vector3.UP
 var _press_elapsed := 0.0
-const MAX_TRAILS := 8
+const ACTIVE_TRAILS := 12
+const MAX_TRAILS := 20
+var _trail_retire_times := PackedFloat32Array()
+var _trail_sample_elapsed := 1.0
 var _trail_points := PackedVector3Array()
 var _trail_ends := PackedVector3Array()
 var _trail_end_amounts := PackedFloat32Array()
@@ -316,6 +319,8 @@ func _trigger_vibration() -> void:
 			Input.start_joy_vibration(0, vibration_strength, vibration_strength, vibration_strength * 0.2)
 
 func reset_deformation() -> void:
+	_trail_retire_times.clear()
+	_trail_sample_elapsed = 1.0
 	_trail_ends.clear()
 	_trail_end_amounts.clear()
 	_stroke_has_segment = false
@@ -359,7 +364,13 @@ func _physics_process(delta: float) -> void:
 	# Position follows the latest stable-surface hit within this frame. Only
 	# pressure depth and departed material recover over time, never the pointer.
 	_anchor_point = _anchor_target
-	for i in range(_trail_amounts.size()):
+	_trail_sample_elapsed += minf(delta, 0.1)
+	for i in range(_trail_amounts.size() - 1, -1, -1):
+		if _trail_retire_times[i] >= 0.0:
+			_trail_retire_times[i] += minf(delta, 0.1)
+			if _trail_retire_times[i] >= _trail_retire_duration():
+				_remove_press_trail(i)
+				continue
 		var decay := exp(-3.0 * minf(delta, 0.1) / maxf(recovery_time, 0.3))
 		_trail_amounts[i] *= decay
 		_trail_end_amounts[i] *= decay
@@ -386,7 +397,7 @@ func _physics_process(delta: float) -> void:
 	_squash_amount = lerpf(_squash_amount, maxf(_press_amount, 0.0), 1.0 - exp(-minf(delta, 0.1) / 0.25))
 	if not active:
 		_recover_timer += delta
-		if _squash_amount < 0.0005 and _trail_peak() < 0.0005 and absf(_press_amount) + absf(_press_velocity) < 0.0005 and (_smooth_pull.length() + _pull_velocity.length()) / _model_radius < 0.0005:
+		if _squash_amount < 0.00001 and _trail_peak() < 0.00001 and absf(_press_amount) + absf(_press_velocity) < 0.00001 and (_smooth_pull.length() + _pull_velocity.length()) / _model_radius < 0.0005:
 			reset_deformation()
 			return
 	_cpu_dirty = true
@@ -402,8 +413,24 @@ func _signed_stretch() -> float:
 func _trail_peak() -> float:
 	var peak := 0.0
 	for i in range(_trail_amounts.size()):
-		peak = maxf(peak, maxf(_trail_amounts[i], _trail_end_amounts[i]))
+		peak = maxf(peak, maxf(_trail_amounts[i], _trail_end_amounts[i]) * _trail_visibility(i))
 	return peak
+
+func _trail_retire_duration() -> float:
+	return maxf(recovery_time, 0.3) * 0.35
+
+func _trail_visibility(index: int) -> float:
+	if _trail_retire_times[index] < 0.0:
+		return 1.0
+	return 1.0 - smoothstep(0.0, _trail_retire_duration(), _trail_retire_times[index])
+
+func _remove_press_trail(index: int) -> void:
+	_trail_points.remove_at(index)
+	_trail_ends.remove_at(index)
+	_trail_normals.remove_at(index)
+	_trail_amounts.remove_at(index)
+	_trail_end_amounts.remove_at(index)
+	_trail_retire_times.remove_at(index)
 
 func _add_press_trail(start: Vector3, end: Vector3, normal: Vector3, amount: float) -> void:
 	if amount < 0.001:
@@ -414,16 +441,25 @@ func _add_press_trail(start: Vector3, end: Vector3, normal: Vector3, amount: flo
 	if _stroke_has_segment and last >= 0:
 		var previous := (_trail_ends[last] - _trail_points[last]).normalized()
 		var direction := (end - start).normalized()
-		if previous.dot(direction) > 0.985:
+		if previous.dot(direction) > 0.985 or _trail_sample_elapsed < maxf(recovery_time, 0.3) / 16.0:
 			_trail_ends[last] = end
 			_trail_end_amounts[last] = amount
 			return
-	if _trail_points.size() == MAX_TRAILS:
-		_trail_points.remove_at(0)
-		_trail_ends.remove_at(0)
-		_trail_normals.remove_at(0)
-		_trail_amounts.remove_at(0)
-		_trail_end_amounts.remove_at(0)
+	# Bound admission frequency so retiring slots finish their fade before
+	# reuse. Never delete a still-visible segment to accommodate new input.
+	if _trail_points.size() >= MAX_TRAILS or (_trail_points.size() >= ACTIVE_TRAILS and _trail_sample_elapsed < maxf(recovery_time, 0.3) / 16.0):
+		return
+	_trail_sample_elapsed = 0.0
+	var active_count := 0
+	for time in _trail_retire_times:
+		if time < 0.0:
+			active_count += 1
+	if active_count >= ACTIVE_TRAILS:
+		for i in range(_trail_retire_times.size()):
+			if _trail_retire_times[i] < 0.0:
+				_trail_retire_times[i] = 0.0
+				break
+	_trail_retire_times.append(-1.0)
 	_trail_points.append(start)
 	_trail_ends.append(end)
 	_trail_normals.append(normal)
@@ -437,7 +473,7 @@ func _trail_offset_at(position: Vector3, index: int) -> Vector3:
 	var tangent := segment - normal * segment.dot(normal)
 	var relative := position - _trail_points[index]
 	var weight := clampf(relative.dot(tangent) / maxf(tangent.length_squared(), 0.00000001), 0.0, 1.0)
-	return _dent_at(position, _trail_points[index].lerp(_trail_ends[index], weight), normal, lerpf(_trail_amounts[index], _trail_end_amounts[index], weight))
+	return _dent_at(position, _trail_points[index].lerp(_trail_ends[index], weight), normal, lerpf(_trail_amounts[index], _trail_end_amounts[index], weight) * _trail_visibility(index))
 
 func _dent_at(position: Vector3, point: Vector3, normal: Vector3, amount: float) -> Vector3:
 	var relative := position - point
@@ -455,19 +491,26 @@ func _dent_at(position: Vector3, point: Vector3, normal: Vector3, amount: float)
 func _target_offset_for(rest_position: Vector3) -> Vector3:
 	var relative := rest_position - _anchor_point
 	var offset := _dent_at(rest_position, _anchor_point, _anchor_normal, _press_amount)
-	var weight := pow(offset.length_squared(), 2.0)
-	var weighted_offset := offset * weight
-	var total_weight := weight
+	# Rescale per evaluated vertex, not by the strongest contact elsewhere.
+	# The largest local weight is always one, even at the fading trail's rim.
+	# This preserves a linear fade without dividing by tiny absolute weights.
+	var max_squared := offset.length_squared()
+	var total_weight := 1.0 if max_squared > 0.0 else 0.0
+	var weighted_offset := offset * total_weight
 	for i in range(_trail_points.size()):
-		if maxf(_trail_amounts[i], _trail_end_amounts[i]) < 0.0005:
-			continue
 		var trail := _trail_offset_at(rest_position, i)
-		# A normalized blend is continuous where trails meet, and cannot deepen
-		# by repeatedly crossing the same place (a convex combination).
-		var trail_weight := pow(trail.length_squared(), 2.0)
-		weighted_offset += trail * trail_weight
-		total_weight += trail_weight
-	offset = weighted_offset / maxf(total_weight, 0.000000000001)
+		var squared := trail.length_squared()
+		if squared > max_squared:
+			var ratio := max_squared / squared
+			weighted_offset *= ratio * ratio
+			total_weight *= ratio * ratio
+			max_squared = squared
+		if max_squared > 0.0:
+			var ratio := squared / max_squared
+			var weight := ratio * ratio
+			weighted_offset += trail * weight
+			total_weight += weight
+	offset = weighted_offset / maxf(total_weight, 1.0)
 	var bottom := _model_center.y - _model_size.y * 0.5
 	var squash := clampf(_squash_amount * squash_strength, -0.04, 0.18)
 	var spread := 1.0 / sqrt(1.0 - squash) - 1.0
@@ -649,12 +692,16 @@ func _sync_gpu() -> void:
 	var points := _trail_points.duplicate()
 	var ends := _trail_ends.duplicate()
 	var end_amounts := _trail_end_amounts.duplicate()
+	for i in range(end_amounts.size()):
+		end_amounts[i] *= _trail_visibility(i)
 	ends.resize(MAX_TRAILS)
 	end_amounts.resize(MAX_TRAILS)
 	_shader_material.set_shader_parameter("trail_ends", ends)
 	_shader_material.set_shader_parameter("trail_end_amounts", end_amounts)
 	var normals := _trail_normals.duplicate()
 	var amounts := _trail_amounts.duplicate()
+	for i in range(amounts.size()):
+		amounts[i] *= _trail_visibility(i)
 	points.resize(MAX_TRAILS)
 	normals.resize(MAX_TRAILS)
 	amounts.resize(MAX_TRAILS)

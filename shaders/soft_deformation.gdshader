@@ -25,11 +25,11 @@ uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
 uniform float stretch_amount = 0.0;
 
 uniform int trail_count = 0;
-uniform vec3 trail_points[8];
-uniform vec3 trail_ends[8];
-uniform float trail_end_amounts[8];
-uniform vec3 trail_normals[8];
-uniform float trail_amounts[8];
+uniform vec3 trail_points[20];
+uniform vec3 trail_ends[20];
+uniform float trail_end_amounts[20];
+uniform vec3 trail_normals[20];
+uniform float trail_amounts[20];
 
 vec3 dent_at(vec3 p, vec3 point, vec3 normal, float amount) {
 	vec3 relative = p - point;
@@ -48,21 +48,31 @@ vec3 dent_at(vec3 p, vec3 point, vec3 normal, float amount) {
 vec3 deform(vec3 p) {
 	vec3 relative = p - anchor_point;
 	vec3 offset = dent_at(p, anchor_point, anchor_normal, press_amount);
-	float weight_sum = pow(dot(offset, offset), 2.0);
+	float max_squared = dot(offset, offset);
+	float weight_sum = max_squared > 0.0 ? 1.0 : 0.0;
 	vec3 weighted_offset = offset * weight_sum;
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < 20; i++) {
 		if (i >= trail_count) { break; }
-		if (max(trail_amounts[i], trail_end_amounts[i]) < 0.0005) { continue; }
 		vec3 normal = trail_normals[i];
 		vec3 segment = trail_ends[i] - trail_points[i];
 		vec3 tangent = segment - normal * dot(segment, normal);
 		float weight = clamp(dot(p - trail_points[i], tangent) / max(dot(tangent, tangent), 0.00000001), 0.0, 1.0);
 		vec3 trail = dent_at(p, mix(trail_points[i], trail_ends[i], weight), normal, mix(trail_amounts[i], trail_end_amounts[i], weight));
-		float trail_weight = pow(dot(trail, trail), 2.0);
-		weighted_offset += trail * trail_weight;
-		weight_sum += trail_weight;
+		float squared = dot(trail, trail);
+		if (squared > max_squared) {
+			float ratio = max_squared / squared;
+			weighted_offset *= ratio * ratio;
+			weight_sum *= ratio * ratio;
+			max_squared = squared;
+		}
+		if (max_squared > 0.0) {
+			float ratio = squared / max_squared;
+			float trail_weight = ratio * ratio;
+			weighted_offset += trail * trail_weight;
+			weight_sum += trail_weight;
+		}
 	}
-	offset = weighted_offset / max(weight_sum, 1e-12);
+	offset = weighted_offset / max(weight_sum, 1.0);
 	float bottom = model_center.y - model_size.y * 0.5;
 	float squash = clamp(squash_amount * squash_strength, -0.04, 0.18);
 	float spread = inversesqrt(1.0 - squash) - 1.0;

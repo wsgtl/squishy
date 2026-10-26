@@ -39,7 +39,8 @@ var _camera_retract: float = 1.0
 var _base_camera_dist: float = 4.5
 var _base_camera_y: float = 2.8
 var _look_at_target := Vector3(0.0, 1.0, 0.0)
-var _board: MeshInstance3D
+var _board: Node3D
+var _board_source_size := Vector3(1.349289, 0.075418, 1.349289)
 
 # 字体
 var _cjk_font: FontFile
@@ -281,6 +282,8 @@ func _build_environment() -> void:
 	add_child(front_light)
 
 func _build_stage() -> void:
+	# Keep the original large ground plane for the scene background color. The
+	# authored bottom is an object placed above it, not a replacement for it.
 	var ground := MeshInstance3D.new()
 	var ground_mesh := PlaneMesh.new()
 	ground_mesh.size = Vector2(200.0, 200.0)
@@ -292,7 +295,17 @@ func _build_stage() -> void:
 	ground.position.y = -0.035
 	add_child(ground)
 
-	# 底座 - 占满竖屏宽度再超出20%
+	# Use the authored bottom model instead of generating a primitive cylinder.
+	var bottom_scene := load("res://glb/bottom.glb")
+	if bottom_scene != null:
+		_board = bottom_scene.instantiate() as Node3D
+		if _board != null:
+			_board.name = "Bottom"
+			_board.position.y = 0.2123
+			add_child(_board)
+			_resize_board()
+			return
+	# Fallback for projects where the authored asset is unavailable.
 	_board = MeshInstance3D.new()
 	var board_mesh := CylinderMesh.new()
 	board_mesh.height = 0.26
@@ -311,11 +324,17 @@ func _resize_board() -> void:
 		return
 	var board_y := _board.position.y
 	var screen_width_world := _calculate_screen_width_at_y(board_y)
-	var board_radius := screen_width_world * 0.6
-	var board_mesh := _board.mesh as CylinderMesh
-	if board_mesh != null:
-		board_mesh.top_radius = board_radius
-		board_mesh.bottom_radius = board_radius
+	var target_diameter := screen_width_world * 1.2
+	if _board is MeshInstance3D:
+		var board_mesh := _board.mesh as CylinderMesh
+		if board_mesh != null:
+			board_mesh.top_radius = target_diameter * 0.5
+			board_mesh.bottom_radius = target_diameter * 0.5
+		return
+	# The imported base keeps its authored proportions; only scale uniformly to
+	# match the same screen coverage as the old generated cylinder.
+	var authored_diameter := maxf(_board_source_size.x, _board_source_size.z)
+	_board.scale = Vector3.ONE * (target_diameter / authored_diameter)
 
 func _calculate_screen_width_at_y(y: float) -> float:
 	if _camera == null:
