@@ -13,8 +13,8 @@ class_name BlobDeformer
 @export var softness: float = 0.9
 # 按压深度 (0.1-0.5, 默认0.32) - 按压最大深度
 @export var min_depth: float = 0.32
-# 手指宽度 (0.12-0.36, 默认0.23) - 接触区域大小
-@export var finger_width: float = 0.23
+# 手指宽度 (0.072-0.216, 默认0.138，较原版缩小40%) - 接触区域大小
+@export var finger_width: float = 0.138
 # 弹性抖动 (0-1, 默认0.55) - 松手后的果冻感
 @export var elasticity: float = 0.55
 # 初始回弹 (0-0.6, 默认0.24) - 松手后的回弹力度
@@ -56,6 +56,14 @@ var _shader_material: ShaderMaterial
 var _anchor_target := Vector3.ZERO
 var _normal_target := Vector3.UP
 var _press_elapsed := 0.0
+const MAX_TRAILS := 8
+var _trail_points := PackedVector3Array()
+var _trail_ends := PackedVector3Array()
+var _trail_end_amounts := PackedFloat32Array()
+var _stroke_has_segment := false
+var _trail_normals := PackedVector3Array()
+var _trail_amounts := PackedFloat32Array()
+var _last_trail_point := Vector3.ZERO
 var _uvs := PackedVector2Array()
 var _indices := PackedInt32Array()
 
@@ -63,6 +71,7 @@ var _interaction_mode: int = -1
 var _anchor_normal := Vector3.UP
 var _anchor_point := Vector3.ZERO
 var _drag_origin := Vector3.ZERO
+var _squash_amount := 0.0
 var _press_amount := 0.0
 var _press_velocity := 0.0
 var _smooth_pull := Vector3.ZERO
@@ -242,12 +251,15 @@ func pick_ray(world_origin: Vector3, world_direction: Vector3, stable_surface: b
 
 func begin_interaction(world_point: Vector3, stretch: bool, rest_point: Vector3 = Vector3.INF, local_normal: Vector3 = Vector3.UP) -> void:
 	_press_elapsed = 0.0
+	_stroke_has_segment = false
 	_drag_origin = _to_mesh_local(world_point)
 	_anchor_target = _drag_origin if rest_point == Vector3.INF else rest_point
 	_normal_target = local_normal.normalized()
-	if not _is_recovering and _interaction_mode < 0:
-		_anchor_point = _anchor_target
-		_anchor_normal = _normal_target
+	_anchor_point = _anchor_target
+	_anchor_normal = _normal_target
+	_last_trail_point = _anchor_point
+	if not stretch:
+		_press_amount = maxf(_press_amount, 0.20)
 	_pull_offset = Vector3.ZERO
 	_interaction_mode = MODE_STRETCH if stretch else MODE_PRESS
 	_is_recovering = false
@@ -258,19 +270,22 @@ func get_stretch_amount() -> float:
 func update_press(rest_point: Vector3, local_normal: Vector3) -> void:
 	if _interaction_mode == MODE_PRESS:
 		_anchor_target = rest_point
-		_normal_target = local_normal.normalized()
+		# Keep the contact direction established on touch-down. Triangle normals
+		# change abruptly at the top/side seam; they must not flip the whole dent.
 
 func update_stretch_vector(world_offset: Vector3) -> void:
 	if _interaction_mode != MODE_STRETCH:
 		return
 	var mesh_node: Node3D = _external_mesh_instance if _external_mesh_instance != null else self
+	world_offset.y = 0.0
 	_pull_offset = (mesh_node.global_basis.inverse() * world_offset * stretch_sensitivity).limit_length(max_stretch * _model_radius)
 	if _pull_offset.length() > _model_radius * 0.00001:
 		_stretch_recovering = false
 
 func update_interaction(world_point: Vector3) -> void:
 	if _interaction_mode == MODE_STRETCH:
-		_pull_offset = ((_to_mesh_local(world_point) - _drag_origin) * stretch_sensitivity).limit_length(max_stretch * _model_radius)
+		var mesh_node: Node3D = _external_mesh_instance if _external_mesh_instance != null else self
+		update_stretch_vector(world_point - mesh_node.to_global(_drag_origin))
 		if _pull_offset.length() > _model_radius * 0.00001:
 			_stretch_recovering = false
 
@@ -301,10 +316,17 @@ func _trigger_vibration() -> void:
 			Input.start_joy_vibration(0, vibration_strength, vibration_strength, vibration_strength * 0.2)
 
 func reset_deformation() -> void:
+	_trail_ends.clear()
+	_trail_end_amounts.clear()
+	_stroke_has_segment = false
+	_trail_points.clear()
+	_trail_normals.clear()
+	_trail_amounts.clear()
 	_stretch_recovering = false
 	_press_elapsed = 0.0
 	_interaction_mode = -1
 	_is_recovering = false
+	_squash_amount = 0.0
 	_press_amount = 0.0
 	_press_velocity = 0.0
 	_pull_offset = Vector3.ZERO
@@ -334,7 +356,16 @@ func _physics_process(delta: float) -> void:
 	var pull_omega := TAU * 3.0 / maxf(recovery_time, 0.3) if not active and _stretch_recovering else omega
 	var pull_damping := clampf(0.23 - elasticity * 0.09 - initial_bounce * 0.02, 0.12, 0.23) if not active and _stretch_recovering else damping_ratio
 	var follow := 1.0 - exp(-22.0 * minf(delta, 0.1))
-	_anchor_point = _anchor_point.lerp(_anchor_target, follow)
+	# Position follows the latest stable-surface hit within this frame. Only
+	# pressure depth and departed material recover over time, never the pointer.
+	_anchor_point = _anchor_target
+	for i in range(_trail_amounts.size()):
+		var decay := exp(-3.0 * minf(delta, 0.1) / maxf(recovery_time, 0.3))
+		_trail_amounts[i] *= decay
+		_trail_end_amounts[i] *= decay
+	if _interaction_mode == MODE_PRESS and _anchor_point.distance_squared_to(_last_trail_point) > _model_radius * _model_radius * 0.00000001:
+		_add_press_trail(_last_trail_point, _anchor_point, _anchor_normal, maxf(_press_amount, 0.0))
+		_last_trail_point = _anchor_point
 	var next_normal := _anchor_normal.lerp(_normal_target, follow)
 	if next_normal.length_squared() > 0.00001:
 		_anchor_normal = next_normal.normalized()
@@ -350,9 +381,12 @@ func _physics_process(delta: float) -> void:
 		_press_amount += _press_velocity * dt
 		_pull_velocity += (pull_omega * pull_omega * (pull_target - _smooth_pull) - 2.0 * pull_damping * pull_omega * _pull_velocity) * dt
 		_smooth_pull += _pull_velocity * dt
+	# Local contact responds immediately, while whole-body compression eases in.
+	_press_amount = clampf(_press_amount, -0.1, 1.0)
+	_squash_amount = lerpf(_squash_amount, maxf(_press_amount, 0.0), 1.0 - exp(-minf(delta, 0.1) / 0.25))
 	if not active:
 		_recover_timer += delta
-		if absf(_press_amount) + absf(_press_velocity) < 0.0005 and (_smooth_pull.length() + _pull_velocity.length()) / _model_radius < 0.0005:
+		if _squash_amount < 0.0005 and _trail_peak() < 0.0005 and absf(_press_amount) + absf(_press_velocity) < 0.0005 and (_smooth_pull.length() + _pull_velocity.length()) / _model_radius < 0.0005:
 			reset_deformation()
 			return
 	_cpu_dirty = true
@@ -365,19 +399,77 @@ func _deformation_axis() -> Vector3:
 func _signed_stretch() -> float:
 	return _smooth_pull.dot(_deformation_axis())
 
-func _target_offset_for(rest_position: Vector3) -> Vector3:
-	var relative := rest_position - _anchor_point
-	var axial := relative.dot(_anchor_normal)
-	var tangent := relative - _anchor_normal * axial
+func _trail_peak() -> float:
+	var peak := 0.0
+	for i in range(_trail_amounts.size()):
+		peak = maxf(peak, maxf(_trail_amounts[i], _trail_end_amounts[i]))
+	return peak
+
+func _add_press_trail(start: Vector3, end: Vector3, normal: Vector3, amount: float) -> void:
+	if amount < 0.001:
+		return
+	var last := _trail_points.size() - 1
+	# Extend straight runs instead of stamping separate round pits. Keep both
+	# endpoint strengths so recovery varies continuously along the swept path.
+	if _stroke_has_segment and last >= 0:
+		var previous := (_trail_ends[last] - _trail_points[last]).normalized()
+		var direction := (end - start).normalized()
+		if previous.dot(direction) > 0.985:
+			_trail_ends[last] = end
+			_trail_end_amounts[last] = amount
+			return
+	if _trail_points.size() == MAX_TRAILS:
+		_trail_points.remove_at(0)
+		_trail_ends.remove_at(0)
+		_trail_normals.remove_at(0)
+		_trail_amounts.remove_at(0)
+		_trail_end_amounts.remove_at(0)
+	_trail_points.append(start)
+	_trail_ends.append(end)
+	_trail_normals.append(normal)
+	_trail_amounts.append(amount)
+	_trail_end_amounts.append(amount)
+	_stroke_has_segment = true
+
+func _trail_offset_at(position: Vector3, index: int) -> Vector3:
+	var normal := _trail_normals[index]
+	var segment := _trail_ends[index] - _trail_points[index]
+	var tangent := segment - normal * segment.dot(normal)
+	var relative := position - _trail_points[index]
+	var weight := clampf(relative.dot(tangent) / maxf(tangent.length_squared(), 0.00000001), 0.0, 1.0)
+	return _dent_at(position, _trail_points[index].lerp(_trail_ends[index], weight), normal, lerpf(_trail_amounts[index], _trail_end_amounts[index], weight))
+
+func _dent_at(position: Vector3, point: Vector3, normal: Vector3, amount: float) -> Vector3:
+	var relative := position - point
+	var axial := relative.dot(normal)
+	var tangent := relative - normal * axial
 	var sigma := _model_radius * finger_width * (0.85 + softness * 0.25)
 	var radial_sq := tangent.length_squared() / (sigma * sigma)
-	# Restrict the dent to the touched side; the back and base keep their thickness.
 	var depth_mask := exp(-pow(axial / (_model_radius * 0.42), 2.0))
 	var dent := exp(-radial_sq * 0.5)
-	var rim := radial_sq * exp(-radial_sq * 0.5) * 0.12
-	var offset := _anchor_normal * (rim - dent) * min_depth * _model_radius * 1.5 * _press_amount * depth_mask
+	var rim := radial_sq * dent * 0.06
+	# Bound by both object thickness and contact width, even after long holds.
+	var depth := minf(min_depth * _model_radius * 1.5, minf(_model_size.dot(normal.abs()) * 0.45, sigma * 1.5))
+	return normal * (rim - dent) * depth * clampf(amount, -0.1, 1.0) * depth_mask
+
+func _target_offset_for(rest_position: Vector3) -> Vector3:
+	var relative := rest_position - _anchor_point
+	var offset := _dent_at(rest_position, _anchor_point, _anchor_normal, _press_amount)
+	var weight := pow(offset.length_squared(), 2.0)
+	var weighted_offset := offset * weight
+	var total_weight := weight
+	for i in range(_trail_points.size()):
+		if maxf(_trail_amounts[i], _trail_end_amounts[i]) < 0.0005:
+			continue
+		var trail := _trail_offset_at(rest_position, i)
+		# A normalized blend is continuous where trails meet, and cannot deepen
+		# by repeatedly crossing the same place (a convex combination).
+		var trail_weight := pow(trail.length_squared(), 2.0)
+		weighted_offset += trail * trail_weight
+		total_weight += trail_weight
+	offset = weighted_offset / maxf(total_weight, 0.000000000001)
 	var bottom := _model_center.y - _model_size.y * 0.5
-	var squash := clampf(_press_amount * squash_strength, -0.04, 0.18)
+	var squash := clampf(_squash_amount * squash_strength, -0.04, 0.18)
 	var spread := 1.0 / sqrt(1.0 - squash) - 1.0
 	offset += Vector3((rest_position.x - _model_center.x) * spread, -(rest_position.y - bottom) * squash, (rest_position.z - _model_center.z) * spread)
 	var pull_length := _signed_stretch()
@@ -403,11 +495,19 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 		var stretched_along := along + (factor - 1.0) * half_extent * strain_profile
 		var parallel := direction * along
 		var stretched := direction * stretched_along + (centered - parallel) * thin
+		# Scale thickness about the base, so narrowing and recoil never push
+		# the opposite end through the table.
+		stretched.y = bottom - _model_center.y + (rest_position.y - bottom) * thin
 		var grab_sigma := _model_radius * (0.75 + softness * 0.25)
 		var grab := exp(-relative.length_squared() / (2.0 * grab_sigma * grab_sigma))
 		offset += stretched - centered + _smooth_pull * (0.10 + grab * 0.15)
-	# Keep the underside on the board, including while the field overshoots.
-	offset.y = maxf(offset.y, bottom - rest_position.y)
+	# Smoothly resist compression while preserving at least 15% of each
+	# vertex's original height. Unlike a floor clamp, this cannot flatten
+	# both sides of the cake into the same coplanar sheet.
+	if offset.y < 0.0:
+		var height := maxf(rest_position.y - bottom, 0.0)
+		var compressible := maxf(height * 0.85, _model_radius * 0.000001)
+		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible))
 	return offset
 
 func _build_nodes() -> void:
@@ -541,10 +641,27 @@ func _sync_gpu() -> void:
 	_shader_material.set_shader_parameter("anchor_point", _anchor_point)
 	_shader_material.set_shader_parameter("anchor_normal", _anchor_normal)
 	_shader_material.set_shader_parameter("press_amount", _press_amount)
+	_shader_material.set_shader_parameter("squash_amount", _squash_amount)
 	_shader_material.set_shader_parameter("press_depth", min_depth)
 	_shader_material.set_shader_parameter("finger_width", finger_width)
 	_shader_material.set_shader_parameter("softness", softness)
 	_shader_material.set_shader_parameter("squash_strength", squash_strength)
+	var points := _trail_points.duplicate()
+	var ends := _trail_ends.duplicate()
+	var end_amounts := _trail_end_amounts.duplicate()
+	ends.resize(MAX_TRAILS)
+	end_amounts.resize(MAX_TRAILS)
+	_shader_material.set_shader_parameter("trail_ends", ends)
+	_shader_material.set_shader_parameter("trail_end_amounts", end_amounts)
+	var normals := _trail_normals.duplicate()
+	var amounts := _trail_amounts.duplicate()
+	points.resize(MAX_TRAILS)
+	normals.resize(MAX_TRAILS)
+	amounts.resize(MAX_TRAILS)
+	_shader_material.set_shader_parameter("trail_count", _trail_points.size())
+	_shader_material.set_shader_parameter("trail_points", points)
+	_shader_material.set_shader_parameter("trail_normals", normals)
+	_shader_material.set_shader_parameter("trail_amounts", amounts)
 	_shader_material.set_shader_parameter("pull", _smooth_pull)
 	_shader_material.set_shader_parameter("stretch_axis", _deformation_axis())
 	_shader_material.set_shader_parameter("stretch_amount", _signed_stretch())

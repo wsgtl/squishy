@@ -15,27 +15,56 @@ uniform float model_radius = 1.0;
 uniform vec3 anchor_point;
 uniform vec3 anchor_normal = vec3(0.0, 1.0, 0.0);
 uniform float press_amount = 0.0;
+uniform float squash_amount = 0.0;
 uniform float press_depth = 0.32;
-uniform float finger_width = 0.23;
+uniform float finger_width = 0.138;
 uniform float softness = 0.9;
 uniform float squash_strength = 0.10;
 uniform vec3 pull = vec3(0.0);
 uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
 uniform float stretch_amount = 0.0;
 
-vec3 deform(vec3 p) {
-	vec3 relative = p - anchor_point;
-	float axial = dot(relative, anchor_normal);
-	vec3 tangent = relative - anchor_normal * axial;
+uniform int trail_count = 0;
+uniform vec3 trail_points[8];
+uniform vec3 trail_ends[8];
+uniform float trail_end_amounts[8];
+uniform vec3 trail_normals[8];
+uniform float trail_amounts[8];
+
+vec3 dent_at(vec3 p, vec3 point, vec3 normal, float amount) {
+	vec3 relative = p - point;
+	float axial = dot(relative, normal);
+	vec3 tangent = relative - normal * axial;
 	float sigma = model_radius * finger_width * (0.85 + softness * 0.25);
 	float radial_sq = dot(tangent, tangent) / (sigma * sigma);
 	float depth_ratio = axial / (model_radius * 0.42);
 	float depth_mask = exp(-depth_ratio * depth_ratio);
 	float dent = exp(-radial_sq * 0.5);
-	float rim = radial_sq * dent * 0.12;
-	vec3 offset = anchor_normal * (rim - dent) * press_depth * model_radius * 1.5 * press_amount * depth_mask;
+	float rim = radial_sq * dent * 0.06;
+	float depth = min(press_depth * model_radius * 1.5, min(dot(model_size, abs(normal)) * 0.45, sigma * 1.5));
+	return normal * (rim - dent) * depth * clamp(amount, -0.1, 1.0) * depth_mask;
+}
+
+vec3 deform(vec3 p) {
+	vec3 relative = p - anchor_point;
+	vec3 offset = dent_at(p, anchor_point, anchor_normal, press_amount);
+	float weight_sum = pow(dot(offset, offset), 2.0);
+	vec3 weighted_offset = offset * weight_sum;
+	for (int i = 0; i < 8; i++) {
+		if (i >= trail_count) { break; }
+		if (max(trail_amounts[i], trail_end_amounts[i]) < 0.0005) { continue; }
+		vec3 normal = trail_normals[i];
+		vec3 segment = trail_ends[i] - trail_points[i];
+		vec3 tangent = segment - normal * dot(segment, normal);
+		float weight = clamp(dot(p - trail_points[i], tangent) / max(dot(tangent, tangent), 0.00000001), 0.0, 1.0);
+		vec3 trail = dent_at(p, mix(trail_points[i], trail_ends[i], weight), normal, mix(trail_amounts[i], trail_end_amounts[i], weight));
+		float trail_weight = pow(dot(trail, trail), 2.0);
+		weighted_offset += trail * trail_weight;
+		weight_sum += trail_weight;
+	}
+	offset = weighted_offset / max(weight_sum, 1e-12);
 	float bottom = model_center.y - model_size.y * 0.5;
-	float squash = clamp(press_amount * squash_strength, -0.04, 0.18);
+	float squash = clamp(squash_amount * squash_strength, -0.04, 0.18);
 	float spread = inversesqrt(1.0 - squash) - 1.0;
 	offset += vec3((p.x - model_center.x) * spread, -(p.y - bottom) * squash, (p.z - model_center.z) * spread);
 	float pull_length = stretch_amount;
@@ -54,11 +83,16 @@ vec3 deform(vec3 p) {
 		float strain_profile = mix(axis_position, tanh(axis_position * 2.2) / tanh(2.2), neck_strength * 0.8);
 		float stretched_along = along + (factor - 1.0) * half_extent * strain_profile;
 		vec3 stretched = direction * stretched_along + (centered - direction * along) * thin;
+		stretched.y = bottom - model_center.y + (p.y - bottom) * thin;
 		float grab_sigma = model_radius * (0.75 + softness * 0.25);
 		float grab = exp(-dot(relative, relative) / (2.0 * grab_sigma * grab_sigma));
 		offset += stretched - centered + pull * (0.10 + grab * 0.15);
 	}
-	offset.y = max(offset.y, bottom - p.y);
+	if (offset.y < 0.0) {
+		float height = max(p.y - bottom, 0.0);
+		float compressible = max(height * 0.85, model_radius * 0.000001);
+		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible));
+	}
 	return p + offset;
 }
 
@@ -81,8 +115,10 @@ void vertex() {
 	if (has_normal_texture) {
 		vec3 deformed_tangent = deform(p + TANGENT * epsilon) - deformed;
 		vec3 deformed_binormal = deform(p + BINORMAL * epsilon) - deformed;
-		TANGENT = normalize(deformed_tangent - NORMAL * dot(NORMAL, deformed_tangent));
-		BINORMAL = normalize(deformed_binormal - NORMAL * dot(NORMAL, deformed_binormal));
+		vec3 tangent_projected = deformed_tangent - NORMAL * dot(NORMAL, deformed_tangent);
+		vec3 binormal_projected = deformed_binormal - NORMAL * dot(NORMAL, deformed_binormal);
+		TANGENT = length(tangent_projected) > 1e-8 ? normalize(tangent_projected) : t;
+		BINORMAL = length(binormal_projected) > 1e-8 ? normalize(binormal_projected) : cross(NORMAL, TANGENT);
 	}
 	VERTEX = deformed;
 }

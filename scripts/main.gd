@@ -210,7 +210,7 @@ func _begin_pointer(screen_position: Vector2, stretch: bool, button: int) -> voi
 	_pointer_position = screen_position
 	_press_pointer_dirty = false
 	_drag_camera_transform = _camera.global_transform
-	_drag_plane = Plane(_camera.global_basis.z.normalized(), hit.position)
+	_drag_plane = Plane(Vector3.UP, hit.position)
 	_blob.begin_interaction(hit.position, stretch, hit.rest_point, hit.local_normal)
 	
 	if stretch:
@@ -343,7 +343,7 @@ func _build_blob() -> void:
 		var aabb := _get_model_aabb(instance)
 		var model_bottom_y := aabb.position.y
 		var board_top_y := 0.12 + 0.13  # 底座位置 + 半高
-		instance.position = Vector3(-aabb.get_center().x, board_top_y - model_bottom_y, -aabb.get_center().z)
+		instance.position = Vector3(0.0, board_top_y + MODEL_WIDTH * 0.0015 - model_bottom_y, 0.0)
 		
 		_auto_focus_camera(instance)
 		_update_camera_position()
@@ -367,9 +367,7 @@ func _build_blob() -> void:
 # once so deformation, base constraints and picking all use the same upright axes.
 func _bake_model_transform(mesh_instance: MeshInstance3D) -> void:
 	var transform := mesh_instance.global_transform
-	# Center the geometry itself, not only its world placement. Rotating the
-	# model root must turn around the cake's center rather than its author origin.
-	var pivot := (transform * mesh_instance.get_aabb()).get_center()
+	# Preserve the authored origin; only bake the imported coordinate transform.
 	var normal_basis := transform.basis.inverse().transposed()
 	var mesh := ArrayMesh.new()
 	for surface in range(mesh_instance.mesh.get_surface_count()):
@@ -378,7 +376,7 @@ func _bake_model_transform(mesh_instance: MeshInstance3D) -> void:
 		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 		var tangents: PackedFloat32Array = arrays[Mesh.ARRAY_TANGENT]
 		for i in range(vertices.size()):
-			vertices[i] = transform * vertices[i] - pivot
+			vertices[i] = transform * vertices[i]
 			if not normals.is_empty():
 				normals[i] = (normal_basis * normals[i]).normalized()
 			if not tangents.is_empty():
@@ -556,10 +554,10 @@ func _build_hud() -> void:
 	content.add_child(finger_row)
 	finger_row.add_child(_make_label("手指宽度", 14, Color("#fff2dc")))
 	var finger_slider := HSlider.new()
-	finger_slider.min_value = 0.12
-	finger_slider.max_value = 0.36
-	finger_slider.step = 0.01
-	finger_slider.value = 0.23
+	finger_slider.min_value = 0.072
+	finger_slider.max_value = 0.216
+	finger_slider.step = 0.001
+	finger_slider.value = _blob.finger_width
 	finger_slider.custom_minimum_size = Vector2(190.0, 24.0)
 	finger_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	finger_slider.value_changed.connect(_on_finger_changed)

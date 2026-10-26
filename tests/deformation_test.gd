@@ -106,7 +106,7 @@ func check_press_feel() -> void:
 	var target: Vector3 = blob._anchor_target
 	check(blob._anchor_point.distance_to(old_anchor) < 0.000001, "Pointer input does not snap the rendered dent")
 	blob._physics_process(1.0 / 60.0)
-	check(blob._anchor_point.distance_to(target) < old_anchor.distance_to(target) and blob._anchor_point.distance_to(target) > 0.000001, "Dent follows drag with smooth convergence")
+	check(blob._anchor_point.distance_to(target) < 0.000001, "Dent reaches latest pointer position in one frame")
 	check(blob._press_elapsed > 3.0, "Dragging does not restart hold duration")
 	check(blob._external_mesh_instance.mesh == original_mesh and blob._cpu_dirty, "Rendering keeps static mesh and defers CPU vertex work")
 	main._finish_gesture()
@@ -154,6 +154,114 @@ func check_rebound() -> void:
 	check(long_pull.shortened and long_pull.thickened, "Rebound overshoots into shorter and thicker than rest")
 	check(max_offset() < 0.001, "Multiple rebounds eventually settle at original shape")
 
+func check_floor_safety() -> void:
+	main._finish_gesture()
+	blob.reset_deformation()
+	var floor_y: float = blob._model_center.y - blob._model_size.y * 0.5
+	var safe := true
+	var retained := true
+	for direction in [Vector3.RIGHT, Vector3.FORWARD, Vector3(1, 0, -1).normalized()]:
+		for strength in [1.2, 2.4, 3.6, -1.2]:
+			blob._smooth_pull = direction * blob._model_radius * strength
+			blob._stretch_recovering = true
+			blob._rebound_axis = direction
+			for point in blob._rest_positions:
+				var deformed: Vector3 = point + blob._target_offset_for(point)
+				safe = safe and deformed.y >= floor_y - 0.000001
+				if point.y > blob._model_center.y:
+					retained = retained and deformed.y - floor_y >= (point.y - floor_y) * 0.149
+	check(safe, "Forward, sideways, diagonal stretch and recoil stay above the base")
+	check(retained, "Upper surface retains thickness instead of collapsing onto the floor")
+	var world_floor: float = blob._external_mesh_instance.to_global(Vector3(0, floor_y, 0)).y
+	check(world_floor > main._board.position.y + main._board.mesh.height * 0.5 + 0.001, "Model and board retain a small depth separation")
+	blob.reset_deformation()
+	var point := screen_point()
+	main._begin_pointer(point, true, MOUSE_BUTTON_LEFT)
+	main._move_pointer(point + Vector2(0, 280))
+	advance(0.5)
+	check(absf(blob._pull_offset.y) < 0.000001 and absf(blob._pull_offset.z) > blob._model_radius * 0.1, "Forward mouse gesture stays in table plane")
+	await screenshot("forward-stretch")
+	main._finish_gesture()
+	advance(5.0)
+
+func check_press_trail() -> void:
+	blob.reset_deformation()
+	var node: Node3D = blob._external_mesh_instance
+	var top: Vector3 = blob._model_center + Vector3.UP * blob._model_size.y * 0.45
+	var start := top - Vector3.RIGHT * blob._model_radius * 0.4
+	blob.begin_interaction(node.to_global(start), false, start, Vector3.UP)
+	advance(1.7)
+	var original_normal: Vector3 = blob._normal_target
+	for i in range(36):
+		var target := start + Vector3.RIGHT * blob._model_radius * (float(i) / 35.0) * 0.8
+		blob.update_press(target, Vector3.RIGHT if i > 18 else Vector3.UP)
+		blob._physics_process(1.0 / 60.0)
+	check(blob._normal_target.dot(original_normal) > 0.999, "Crossing edge normals does not flip press direction")
+	check(blob._trail_points.size() > 0 and blob._trail_points.size() <= blob.MAX_TRAILS, "Drag retains bounded continuous segments")
+	var old_point: Vector3 = blob._trail_points[0]
+	var remaining := blob._target_offset_for(old_point).length()
+	check(remaining > blob._model_radius * 0.04, "Departed press positions retain visible deformation")
+	# A straight stroke has one capsule, so even between former stamp positions
+	# there are no alternating shallow gaps. Disable global squash to isolate it.
+	var previous_squash: float = blob.squash_strength
+	blob.squash_strength = 0.0
+	var previous_depth := -blob._trail_offset_at(start, 0).y
+	var continuous := true
+	for sample in range(1, 41):
+		var point := start.lerp(blob._anchor_point, sample / 40.0)
+		var depth := -blob._trail_offset_at(point, 0).y
+		continuous = continuous and depth >= previous_depth - 0.00001
+		previous_depth = depth
+	check(continuous and blob._trail_points.size() == 1, "Straight drag forms a continuous trough without scalloped gaps")
+	blob.squash_strength = previous_squash
+	await screenshot("press-trail")
+	blob.end_interaction()
+	var initial_peak: float = blob._trail_peak()
+	advance(0.4)
+	check(blob._trail_peak() > 0.01 and blob._trail_peak() < initial_peak, "Released trail recovers gradually rather than snapping")
+	advance(6.0)
+	check(blob._trail_points.is_empty() and max_offset() < 0.001, "Press trails completely recover and go idle")
+	# Large per-frame motion must be swept all the way to the latest contact.
+	blob.begin_interaction(node.to_global(start), false, start, Vector3.UP)
+	check(blob._press_amount >= 0.2, "Touch-down has immediate visible pressure")
+	check(blob._squash_amount == 0.0, "Touch-down does not instantly compress the whole model")
+	blob._physics_process(1.0 / 60.0)
+	check(blob._squash_amount > 0.0 and blob._squash_amount < blob._press_amount * 0.1, "Body compression eases in gradually from the first frame")
+	advance(1.7)
+	var finish := start + Vector3.RIGHT * blob._model_radius * 1.1
+	blob.update_press(finish, Vector3.UP)
+	blob._physics_process(1.0 / 60.0)
+	check(blob._anchor_point.distance_to(finish) < 0.000001, "Fast drag has no radius-dependent tracking lag")
+	check(-blob._trail_offset_at(start.lerp(finish, 0.5), 0).y > blob._model_radius * 0.1, "Fast drag fills the full swept segment")
+	blob.end_interaction()
+	var old_count: int = blob._trail_points.size()
+	var new_start := top + Vector3.FORWARD * blob._model_radius * 0.5
+	blob.begin_interaction(node.to_global(new_start), false, new_start, Vector3.UP)
+	blob.update_press(new_start + Vector3.RIGHT * 0.05, Vector3.UP)
+	blob._physics_process(1.0 / 60.0)
+	check(blob._trail_points.size() == old_count + 1 and blob._trail_points[old_count].distance_to(new_start) < 0.000001, "Separate presses never bridge unrelated strokes")
+	blob.reset_deformation()
+	# Repeated circular strokes on one face must stay bounded and finite.
+	blob.begin_interaction(node.to_global(top), false, top, Vector3.UP)
+	for frame in range(720):
+		var angle := frame * TAU / 60.0
+		blob.update_press(top + Vector3(cos(angle), 0.0, sin(angle)) * blob._model_radius * 0.18, Vector3.UP)
+		blob._physics_process(1.0 / 60.0)
+	var bounded := true
+	var smooth_field := true
+	var epsilon: float = blob._model_radius * 0.0001
+	for sample in range(121):
+		var point := top + Vector3.RIGHT * blob._model_radius * (sample / 120.0 - 0.5)
+		var offset: Vector3 = blob._target_offset_for(point)
+		bounded = bounded and offset.is_finite() and -offset.y <= blob._model_size.y * 0.55
+		var neighbor: Vector3 = blob._target_offset_for(point + Vector3.RIGHT * epsilon)
+		smooth_field = smooth_field and offset.distance_to(neighbor) < epsilon * 5.0
+	check(bounded and blob._press_amount <= 1.0, "Twelve circular strokes cannot accumulate excessive depth")
+	check(smooth_field, "Overlapping trails have no displacement jumps that spike normals")
+	await screenshot("circular-press")
+	blob.reset_deformation()
+	check(absf(blob.finger_width - 0.23 * 0.6) < 0.00001, "Default finger radius is reduced by 40 percent")
+
 func screenshot(label: String) -> void:
 	if not capture:
 		return
@@ -191,17 +299,17 @@ func _run() -> void:
 	var original_rotation: Vector3 = main._model_root.rotation
 	for angle in [0.5, 1.1, 1.7, 3.14, 4.7, 6.28]:
 		main._model_root.rotation.y = angle
-		rotation_centered = rotation_centered and mesh_node.to_global(blob._model_center).distance_to(pivot_center) < 0.0001
+		rotation_centered = rotation_centered and mesh_node.to_global(blob._model_center).distance_to(pivot_center) < main.MODEL_WIDTH * 0.001
 		rotation_pickable = rotation_pickable and not main._raycast_blob(screen_point()).is_empty()
 	main._model_root.rotation = original_rotation
-	check(rotation_centered, "Rotation keeps mooncake center fixed on board")
+	check(rotation_centered, "Authored pivot keeps rotation drift below 0.1 percent of model width")
 	check(rotation_pickable, "Rotated mooncake remains pickable")
 	await screenshot("rest")
 	mouse_button(center, true)
 	await process_frame
 	check(main._dragging and not main._stretching, "Left press reaches scene through HUD")
 	advance(0.35)
-	check(max_offset() > 0.12, "Press produces visible indentation")
+	check(max_offset() > blob._model_radius * 0.035, "Press produces visible indentation")
 	await screenshot("press")
 	var outside := center + Vector2(380.0, 0.0)
 	check(main._raycast_blob(outside).is_empty(), "Drag target lies outside model")
@@ -244,7 +352,7 @@ func _run() -> void:
 	motion(center + Vector2(0, -240), true)
 	await process_frame
 	advance(0.3)
-	check(absf(blob._pull_offset.y) > blob._model_radius * 0.1, "Vertical stretch retains Y displacement")
+	check(absf(blob._pull_offset.z) > blob._model_radius * 0.1 and absf(blob._pull_offset.y) < 0.00001, "Screen forward drag stretches along table without downward displacement")
 	var shift_release := InputEventKey.new()
 	shift_release.keycode = KEY_SHIFT
 	shift_release.pressed = false
@@ -330,6 +438,8 @@ func _run() -> void:
 	await check_press_feel()
 	check_neck_profile()
 	await check_rebound()
+	await check_floor_safety()
+	await check_press_trail()
 	for recovery in [0.3, 4.0]:
 		blob.recovery_time = recovery
 		blob.elasticity = 1.0
