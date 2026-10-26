@@ -2,20 +2,24 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ih16pelje4ui"
-path="res://.godot/imported/nienie.icon.png-af6fb65229795982cb0943e0dd569262.ctex"
+uid="uid://8q8d88egxytr"
+path.s3tc="res://.godot/imported/sfl_11.jpg-d1bbcafa74232013c16321144118550a.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "06925d185a20a4da754491d7b06a60af"
 }
 
 [deps]
 
-source_file="res://output/web/nienie.icon.png"
-dest_files=["res://.godot/imported/nienie.icon.png-af6fb65229795982cb0943e0dd569262.ctex"]
+source_file="res://glb/sfl_11.jpg"
+dest_files=["res://.godot/imported/sfl_11.jpg-d1bbcafa74232013c16321144118550a.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -23,7 +27,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -37,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

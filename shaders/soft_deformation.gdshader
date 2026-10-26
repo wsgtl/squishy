@@ -4,6 +4,9 @@ render_mode diffuse_burley, specular_schlick_ggx;
 uniform vec4 base_color : source_color = vec4(1.0);
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable;
 uniform bool has_albedo_texture = false;
+uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform bool has_normal_texture = false;
+uniform float normal_strength = 1.0;
 uniform float material_roughness = 0.6;
 uniform float material_metallic = 0.0;
 uniform vec3 model_center;
@@ -75,6 +78,12 @@ void vertex() {
 	if (dot(new_normal, new_normal) > 1e-20) {
 		NORMAL = normalize(new_normal);
 	}
+	if (has_normal_texture) {
+		vec3 deformed_tangent = deform(p + TANGENT * epsilon) - deformed;
+		vec3 deformed_binormal = deform(p + BINORMAL * epsilon) - deformed;
+		TANGENT = normalize(deformed_tangent - NORMAL * dot(NORMAL, deformed_tangent));
+		BINORMAL = normalize(deformed_binormal - NORMAL * dot(NORMAL, deformed_binormal));
+	}
 	VERTEX = deformed;
 }
 
@@ -84,6 +93,10 @@ void fragment() {
 		color *= texture(albedo_texture, UV);
 	}
 	ALBEDO = color.rgb;
+	if (has_normal_texture) {
+		NORMAL_MAP = texture(normal_texture, UV).rgb;
+		NORMAL_MAP_DEPTH = normal_strength;
+	}
 	ROUGHNESS = material_roughness;
 	METALLIC = material_metallic;
 }

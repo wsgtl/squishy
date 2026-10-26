@@ -182,8 +182,20 @@ func _run() -> void:
 	blob.rebound_vibration = 0.0
 	main._physics_process(0.016)
 	var center := screen_point()
-	check(blob._positions.size() == 6544, "Imported sushi mesh is deformable")
+	check(blob._positions.size() == 5925, "Production mooncake mesh is deformable")
 	check(not main._raycast_blob(center).is_empty(), "Screen ray hits real visible surface")
+	var mesh_node: Node3D = blob._external_mesh_instance
+	var pivot_center := mesh_node.to_global(blob._model_center)
+	var rotation_centered := true
+	var rotation_pickable := true
+	var original_rotation: Vector3 = main._model_root.rotation
+	for angle in [0.5, 1.1, 1.7, 3.14, 4.7, 6.28]:
+		main._model_root.rotation.y = angle
+		rotation_centered = rotation_centered and mesh_node.to_global(blob._model_center).distance_to(pivot_center) < 0.0001
+		rotation_pickable = rotation_pickable and not main._raycast_blob(screen_point()).is_empty()
+	main._model_root.rotation = original_rotation
+	check(rotation_centered, "Rotation keeps mooncake center fixed on board")
+	check(rotation_pickable, "Rotated mooncake remains pickable")
 	await screenshot("rest")
 	mouse_button(center, true)
 	await process_frame

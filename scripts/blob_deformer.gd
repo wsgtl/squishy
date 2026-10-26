@@ -519,6 +519,10 @@ func _setup_gpu() -> void:
 		_shader_material.set_shader_parameter("base_color", source.albedo_color)
 		_shader_material.set_shader_parameter("material_roughness", source.roughness)
 		_shader_material.set_shader_parameter("material_metallic", source.metallic)
+		if source.normal_enabled and source.normal_texture != null:
+			_shader_material.set_shader_parameter("normal_texture", source.normal_texture)
+			_shader_material.set_shader_parameter("has_normal_texture", true)
+			_shader_material.set_shader_parameter("normal_strength", source.normal_scale)
 		if source.albedo_texture != null:
 			_shader_material.set_shader_parameter("albedo_texture", source.albedo_texture)
 			_shader_material.set_shader_parameter("has_albedo_texture", true)

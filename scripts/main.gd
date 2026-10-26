@@ -1,5 +1,8 @@
 extends Node3D
 
+const MODEL_PATH := "res://glb/sfl.glb"
+const MODEL_WIDTH := 2.0
+
 const BlobScript = preload("res://scripts/blob_deformer.gd")
 
 var _camera: Camera3D
@@ -324,19 +327,23 @@ func _calculate_screen_width_at_y(y: float) -> float:
 	return dist * tan(half_fov_rad) * 2.0 * aspect
 
 func _build_blob() -> void:
-	var glb_scene := load("res://glb/ss.glb")
+	var glb_scene := load(MODEL_PATH)
 	if glb_scene != null:
 		var instance = glb_scene.instantiate()
-		var model_scale := 6.0
-		instance.scale = Vector3(model_scale, model_scale, model_scale)
 		add_child(instance)
 		_model_root = instance
+		var imported_mesh := _find_first_mesh_instance(instance)
+		if imported_mesh != null:
+			_bake_model_transform(imported_mesh)
+		var original_bounds := _get_model_aabb(instance)
+		var model_scale := MODEL_WIDTH / maxf(original_bounds.size.x, maxf(original_bounds.size.y, original_bounds.size.z))
+		instance.scale = Vector3.ONE * model_scale
 		
 		# 计算模型 AABB 来确定正确位置
 		var aabb := _get_model_aabb(instance)
 		var model_bottom_y := aabb.position.y
 		var board_top_y := 0.12 + 0.13  # 底座位置 + 半高
-		instance.position = Vector3(0.0, board_top_y - model_bottom_y, 0.0)
+		instance.position = Vector3(-aabb.get_center().x, board_top_y - model_bottom_y, -aabb.get_center().z)
 		
 		_auto_focus_camera(instance)
 		_update_camera_position()
@@ -355,6 +362,37 @@ func _build_blob() -> void:
 	_blob.name = "SoftBlob"
 	_blob.position = Vector3(0.0, 1.08, 0.0)
 	add_child(_blob)
+
+# GLB node transforms may rotate the author's Z axis into world Y. Bake these
+# once so deformation, base constraints and picking all use the same upright axes.
+func _bake_model_transform(mesh_instance: MeshInstance3D) -> void:
+	var transform := mesh_instance.global_transform
+	# Center the geometry itself, not only its world placement. Rotating the
+	# model root must turn around the cake's center rather than its author origin.
+	var pivot := (transform * mesh_instance.get_aabb()).get_center()
+	var normal_basis := transform.basis.inverse().transposed()
+	var mesh := ArrayMesh.new()
+	for surface in range(mesh_instance.mesh.get_surface_count()):
+		var arrays := mesh_instance.mesh.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var tangents: PackedFloat32Array = arrays[Mesh.ARRAY_TANGENT]
+		for i in range(vertices.size()):
+			vertices[i] = transform * vertices[i] - pivot
+			if not normals.is_empty():
+				normals[i] = (normal_basis * normals[i]).normalized()
+			if not tangents.is_empty():
+				var tangent := (transform.basis * Vector3(tangents[i * 4], tangents[i * 4 + 1], tangents[i * 4 + 2])).normalized()
+				tangents[i * 4] = tangent.x
+				tangents[i * 4 + 1] = tangent.y
+				tangents[i * 4 + 2] = tangent.z
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		arrays[Mesh.ARRAY_NORMAL] = normals
+		arrays[Mesh.ARRAY_TANGENT] = tangents
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.surface_set_material(surface, mesh_instance.get_active_material(surface))
+	mesh_instance.mesh = mesh
+	mesh_instance.global_transform = Transform3D.IDENTITY
 
 func _get_model_aabb(model_root: Node) -> AABB:
 	var aabb := AABB()
