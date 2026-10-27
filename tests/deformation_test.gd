@@ -91,13 +91,19 @@ func check_press_feel() -> void:
 	var medium := max_offset()
 	advance(1.0)
 	var deep := max_offset()
-	check(medium > shallow * 1.2 and deep > medium * 1.2, "Holding progressively deepens the dent")
+	if blob.raised_rim_press:
+		check(medium > shallow * 1.2 and deep >= medium and blob._press_amount > 0.99, "Gathering press deepens quickly and saturates at full pressure")
+	else:
+		check(medium > shallow * 1.2 and deep > medium * 1.2, "Holding progressively deepens the dent")
 	await screenshot("long-press")
 	advance(2.0)
 	check(absf(max_offset() - deep) < 0.005, "Long hold saturates at bounded depth")
 	var far_point := blob._model_center + Vector3(blob._model_radius * 0.9, blob._model_size.y * 0.4, 0.0)
 	var far_offset := blob._target_offset_for(far_point)
-	check(far_offset.y < -blob._model_size.y * 0.02 and far_offset.x > 0.0, "Press also flattens and widens the whole body")
+	if blob.raised_rim_press:
+		check(far_offset.x < 0.0, "Gathering press pulls the outer body toward the contact")
+	else:
+		check(far_offset.y < -blob._model_size.y * 0.02 and far_offset.x > 0.0, "Press also flattens and widens the whole body")
 	var hit_after: Dictionary = main._raycast_blob(center, true)
 	check(hit_after.rest_point.distance_to(stable_hit.rest_point) < blob._model_radius * 0.0001, "Drag reference stays fixed as the dent deepens")
 	var old_anchor: Vector3 = blob._anchor_point
@@ -169,6 +175,35 @@ func check_rebound() -> void:
 	check(long_pull.domed, "Recoil height peaks at center and tapers smoothly to both horizontal rims")
 	check(long_pull.raised and long_pull.base_fixed, "Recoil thickens upward while the bottom height stays fixed")
 	check(max_offset() < 0.001, "Multiple rebounds eventually settle at original shape")
+
+func check_press_directional_rebound() -> void:
+	var peaks: Array[float] = []
+	for mode in [false, true]:
+		blob.set_raised_rim_press(mode)
+		for hold in [0.12, 1.8]:
+			blob.reset_deformation()
+			var point: Vector3 = blob._model_center + Vector3.UP * blob._model_size.y * 0.45
+			blob.begin_interaction(blob._external_mesh_instance.to_global(point), false, point, Vector3.UP)
+			blob.update_press(point + Vector3.FORWARD * blob._model_radius * 0.1, Vector3.UP)
+			advance(hold)
+			var before: Vector3 = blob._smooth_pull
+			blob.end_interaction()
+			check(blob._smooth_pull.distance_to(before) < 0.000001, "Press release starts rebound without a displacement jump")
+			var compression := 0.0
+			var expansion := 0.0
+			for frame in range(240):
+				blob._physics_process(1.0 / 120.0)
+				var amount: float = blob._signed_stretch() / blob._model_radius
+				compression = maxf(compression, -amount)
+				expansion = maxf(expansion, amount)
+			check(compression > 0.005 and compression < 0.13 and expansion > 0.001 and expansion < compression, "Press produces small compression and weaker opposite rebound in both modes")
+			check(blob._rebound_axis.dot(Vector3.FORWARD) > 0.99, "Press rebound follows the last drag direction")
+			peaks.append(compression)
+			advance(6.0)
+			check(max_offset() < 0.001, "Directional press rebound settles fully")
+	check(peaks[1] > peaks[0] and peaks[3] > peaks[2], "Deeper presses produce stronger directional rebound")
+	blob.set_raised_rim_press(true)
+	blob.reset_deformation()
 
 func check_floor_safety() -> void:
 	main._finish_gesture()
@@ -506,11 +541,39 @@ func _run() -> void:
 	touch.pressed = false
 	feed_input(touch)
 	await process_frame
+	var feel_switch := main.find_child("RaisedRimPressSwitch", true, false) as CheckButton
+	check(feel_switch != null and feel_switch.button_pressed, "Parameter panel exposes the new press feel switch")
+	var feel_center: Vector3 = blob._model_center + Vector3.UP * blob._model_size.y * 0.45
+	var sigma: float = blob._model_radius * blob.finger_width * (0.85 + blob.softness * 0.25)
+	var surrounding: Vector3 = blob._dent_at(feel_center + Vector3.RIGHT * sigma * 2.0, feel_center, Vector3.UP, 1.0)
+	var outer: Vector3 = blob._dent_at(feel_center + Vector3.RIGHT * blob._model_size.x * 0.45, feel_center, Vector3.UP, 1.0)
+	var base_point: Vector3 = blob._model_center - Vector3.UP * blob._model_size.y * 0.5
+	check(blob._dent_at(feel_center, feel_center, Vector3.UP, 1.0).y < 0.0 and surrounding.x < 0.0, "New press gathers surrounding material toward the depressed contact")
+	check(outer.y > 0.0 and outer.x < 0.0, "Outer side curls upward while gathering inward")
+	check(blob._dent_at(base_point, feel_center, Vector3.UP, 1.0).length() < 0.000001, "Gathering and curling leave the bottom fixed")
+	feel_switch.button_pressed = false
+	var old_rise: float = blob._dent_at(feel_center + Vector3.RIGHT * sigma * 2.0, feel_center, Vector3.UP, 1.0).y
+	check(not blob.raised_rim_press and old_rise < 0.0, "Disabling switch restores the original bowl profile")
+	await check_press_feel()
+	feel_switch.button_pressed = true
 	await check_press_feel()
 	check_neck_profile()
 	await check_rebound()
+	check_press_directional_rebound()
 	await check_floor_safety()
 	await check_press_trail()
+	blob.reset_deformation()
+	var grab_top: Vector3 = blob._model_center + Vector3.UP * blob._model_size.y * 0.5
+	var grab_a := grab_top - Vector3.RIGHT * blob._model_radius * 0.4
+	var grab_b := grab_top + Vector3.RIGHT * blob._model_radius * 0.4
+	blob.begin_interaction(blob._external_mesh_instance.to_global(grab_a), true, grab_a, Vector3.UP)
+	blob.set_stretch_contacts(grab_a, Vector3.UP, grab_b, Vector3.UP)
+	advance(0.3)
+	check(blob._target_offset_for(grab_a).y < -blob._model_radius * 0.03 and blob._target_offset_for(grab_b).y < -blob._model_radius * 0.03, "Both stretch contacts visibly indent the surface")
+	blob.end_interaction()
+	advance(0.5)
+	check(blob._grab_pressure < 0.001, "Stretch contact dents fade smoothly after release")
+	blob.reset_deformation()
 	for recovery in [0.3, 4.0]:
 		blob.recovery_time = recovery
 		blob.elasticity = 1.0

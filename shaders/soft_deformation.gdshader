@@ -16,6 +16,7 @@ uniform vec3 model_size = vec3(1.0);
 uniform float model_radius = 1.0;
 uniform vec3 anchor_point;
 uniform vec3 anchor_normal = vec3(0.0, 1.0, 0.0);
+uniform bool raised_rim_press = true;
 uniform float press_amount = 0.0;
 uniform float squash_amount = 0.0;
 uniform float press_depth = 0.32;
@@ -27,6 +28,11 @@ uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
 uniform float stretch_amount = 0.0;
 uniform vec4 stretch_shape = vec4(1.0, 0.0, 1.0, 1.0);
 
+uniform vec3 grab_point_a;
+uniform vec3 grab_point_b;
+uniform vec3 grab_normal_a = vec3(0.0, 1.0, 0.0);
+uniform vec3 grab_normal_b = vec3(0.0, 1.0, 0.0);
+uniform float grab_pressure = 0.0;
 uniform int trail_count = 0;
 uniform vec3 trail_points[20];
 uniform vec3 trail_ends[20];
@@ -45,7 +51,32 @@ vec3 dent_at(vec3 p, vec3 point, vec3 normal, float amount) {
 	float dent = exp(-radial_sq * 0.5);
 	float rim = radial_sq * dent * 0.06;
 	float depth = min(press_depth * model_radius * 1.5, min(dot(model_size, abs(normal)) * 0.45, sigma * 1.5));
-	return normal * (rim - dent) * depth * clamp(amount, -0.1, 1.0) * depth_mask;
+	if (!raised_rim_press) {
+		return normal * (rim - dent) * depth * clamp(amount, -0.1, 1.0) * depth_mask;
+	}
+	depth = min(press_depth * model_radius * 2.1, min(dot(model_size, abs(normal)) * 0.63, sigma * 2.1));
+	float bottom = model_center.y - model_size.y * 0.5;
+	float height = clamp((p.y - bottom) / max(model_size.y, 0.000001), 0.0, 1.0);
+	float base_mask = smoothstep(0.0, 0.65, height);
+	float gather_radius = model_radius * 0.85;
+	float broad = exp(-dot(tangent, tangent) / (2.0 * gather_radius * gather_radius));
+	vec2 normalized_position = (p.xz - model_center.xz) / max(model_size.xz * 0.5, vec2(0.000001));
+	float edge = smoothstep(0.50, 0.95, length(normalized_position));
+	float pressure = clamp(amount, 0.0, 1.0);
+	vec3 inward = -tangent * 0.24 * broad * pressure * base_mask;
+	vec3 curl = vec3(0.0, (depth / 1.4) * 0.70 * edge * broad * pressure * base_mask * abs(normal.y), 0.0);
+	return -normal * dent * depth * pressure * depth_mask * base_mask + inward + curl;
+}
+
+vec3 grab_dent(vec3 p, vec3 point, vec3 normal) {
+	vec3 relative = p - point;
+	float axial = dot(relative, normal);
+	vec3 tangent = relative - normal * axial;
+	float sigma = model_radius * finger_width;
+	float depth_ratio = axial / (model_radius * 0.32);
+	float mask = exp(-dot(tangent, tangent) / (2.0 * sigma * sigma) - depth_ratio * depth_ratio);
+	float depth = min(sigma * 0.7, dot(model_size, abs(normal)) * 0.2);
+	return -normal * depth * mask * grab_pressure;
 }
 
 vec3 deform(vec3 p, out vec3 contact_offset) {
@@ -77,6 +108,11 @@ vec3 deform(vec3 p, out vec3 contact_offset) {
 		}
 	}
 	offset = weighted_offset / max(weight_sum, 1.0);
+	if (grab_pressure > 0.0) {
+		vec3 grab_a = grab_dent(p, grab_point_a, grab_normal_a);
+		vec3 grab_b = grab_dent(p, grab_point_b, grab_normal_b);
+		offset += dot(grab_a, grab_a) >= dot(grab_b, grab_b) ? grab_a : grab_b;
+	}
 	contact_offset = offset;
 	float bottom = model_center.y - model_size.y * 0.5;
 	float squash = clamp(squash_amount * squash_strength, -0.04, 0.18);

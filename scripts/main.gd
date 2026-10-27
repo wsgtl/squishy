@@ -97,9 +97,12 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	# A second finger must start on the model and outside GUI controls.
 	if event is InputEventScreenTouch and event.pressed and _touches.size() == 1 and _dragging:
-		if not _raycast_blob(event.position).is_empty() and not _raycast_blob(_touches[_active_touch_id]).is_empty():
+		var second_hit := _raycast_blob(event.position)
+		var first_hit := _raycast_blob(_touches[_active_touch_id])
+		if not second_hit.is_empty() and not first_hit.is_empty():
 			_touches[event.index] = event.position
 			_begin_pointer(_touches[_active_touch_id], true, MOUSE_BUTTON_LEFT)
+			_blob.set_stretch_contacts(first_hit.rest_point, first_hit.local_normal, second_hit.rest_point, second_hit.local_normal)
 			_pinch_start_distance = _touch_separation().length()
 		return
 	if _dragging or _is_rotating or _active_touch_id >= 0:
@@ -525,6 +528,19 @@ func _build_hud() -> void:
 	
 	var help_label := _make_label("左键拖动：按压 / 推揉\nShift + 左键拖动：拉伸\n拖动空白处：旋转模型\n触屏：单指按压，双指分开拉伸", 14, Color("#fff7eb"))
 	content.add_child(help_label)
+
+	var press_feel_switch := CheckButton.new()
+	press_feel_switch.name = "RaisedRimPressSwitch"
+	press_feel_switch.text = "按压收拢与翘边"
+	press_feel_switch.button_pressed = _blob.raised_rim_press
+	press_feel_switch.add_theme_font_override("font", _cjk_font)
+	press_feel_switch.add_theme_font_size_override("font_size", 16)
+	press_feel_switch.tooltip_text = "开启：四周向按压点收拢、侧缘圆弧翘起；关闭：原版按压手感"
+	press_feel_switch.toggled.connect(func(enabled: bool):
+		_finish_gesture()
+		_blob.set_raised_rim_press(enabled)
+	)
+	content.add_child(press_feel_switch)
 
 	# 回弹时长
 	var recovery_row := HBoxContainer.new()
