@@ -540,7 +540,15 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 		var stretched := direction * stretched_along + (centered - parallel) * thin
 		# Scale thickness about the base, so narrowing and recoil never push
 		# the opposite end through the table.
-		stretched.y = bottom - _model_center.y + (rest_position.y - bottom) * thin
+		var height_scale := thin
+		if strain < 0.0:
+			# A cosine-squared dome peaks in the middle and meets the rim with
+			# zero slope. Both horizontal axes participate, regardless of pull axis.
+			var nx := clampf(absf(centered.x) / maxf(_model_size.x * 0.5, _model_radius * 0.01), 0.0, 1.0)
+			var nz := clampf(absf(centered.z) / maxf(_model_size.z * 0.5, _model_radius * 0.01), 0.0, 1.0)
+			var dome := pow(cos(nx * PI * 0.5) * cos(nz * PI * 0.5), 2.0)
+			height_scale = 1.0 + (thin - 1.0) * 1.75 * dome
+		stretched.y = bottom - _model_center.y + (rest_position.y - bottom) * height_scale
 		var grab_sigma := _model_radius * (0.75 + softness * 0.25)
 		var grab := exp(-relative.length_squared() / (2.0 * grab_sigma * grab_sigma))
 		offset += stretched - centered + _smooth_pull * (0.10 + grab * 0.15)
@@ -712,3 +720,10 @@ func _sync_gpu() -> void:
 	_shader_material.set_shader_parameter("pull", _smooth_pull)
 	_shader_material.set_shader_parameter("stretch_axis", _deformation_axis())
 	_shader_material.set_shader_parameter("stretch_amount", _signed_stretch())
+	# These depend only on the spring state, not on vertices or normal samples.
+	var signed_pull := _signed_stretch()
+	var strain := signed_pull / (_model_radius * 2.0)
+	var factor := 1.0 + strain if strain >= 0.0 else maxf(0.35, exp(strain))
+	var neck := smoothstep(0.65, 2.6, signed_pull / _model_radius)
+	var extent := maxf(_deformation_axis().abs().dot(_model_size * 0.5), _model_radius * 0.01)
+	_shader_material.set_shader_parameter("stretch_shape", Vector4(factor, neck, extent, 1.0 / sqrt(factor)))

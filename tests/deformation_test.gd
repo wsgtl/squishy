@@ -126,6 +126,9 @@ func measure_rebound(strength: float, save_images: bool = false) -> Dictionary:
 	var falling := true
 	var shortened := false
 	var thickened := false
+	var raised := false
+	var base_fixed := false
+	var domed := false
 	for frame in range(720):
 		blob._physics_process(1.0 / 120.0)
 		var amount: float = blob._signed_stretch() / blob._model_radius
@@ -137,11 +140,22 @@ func measure_rebound(strength: float, save_images: bool = false) -> Dictionary:
 				var span: float = (right + blob._target_offset_for(right)).x - (left + blob._target_offset_for(left)).x
 				shortened = span < blob._model_radius * 1.9
 				thickened = section_width(0.0) > blob._model_radius * 0.42
+				var top := blob._model_center + Vector3.UP * blob._model_size.y * 0.5
+				var bottom := blob._model_center - Vector3.UP * blob._model_size.y * 0.5
+				raised = blob._target_offset_for(top).y > blob._model_size.y * 0.15
+				var center_rise: float = blob._target_offset_for(top).y
+				domed = true
+				for horizontal in [Vector3.RIGHT, Vector3.FORWARD]:
+					var extent: float = blob._model_size.x * 0.5 if horizontal == Vector3.RIGHT else blob._model_size.z * 0.5
+					var middle_rise: float = blob._target_offset_for(top + horizontal * extent * 0.5).y
+					var edge_rise: float = blob._target_offset_for(top + horizontal * extent).y
+					domed = domed and center_rise > middle_rise and middle_rise > edge_rise and absf(edge_rise) < 0.000001
+				base_fixed = absf(blob._target_offset_for(bottom).y) < 0.000001
 			if save_images and peaks.size() <= 3:
 				await screenshot("rebound-" + str(peaks.size()))
 		falling = amount < previous
 		previous = amount
-	return {"peaks": peaks, "shortened": shortened, "thickened": thickened}
+	return {"peaks": peaks, "shortened": shortened, "thickened": thickened, "raised": raised, "base_fixed": base_fixed, "domed": domed}
 
 func check_rebound() -> void:
 	var short_pull: Dictionary = await measure_rebound(0.8)
@@ -152,6 +166,8 @@ func check_rebound() -> void:
 		check(peaks[0] > peaks[1] and peaks[1] > peaks[2] and peaks[2] > 0.04, "Three visible rebound peaks progressively decay")
 		check(not short_pull.peaks.is_empty() and peaks[0] > short_pull.peaks[0] * 2.5, "Longer stretch produces proportionally stronger rebound")
 	check(long_pull.shortened and long_pull.thickened, "Rebound overshoots into shorter and thicker than rest")
+	check(long_pull.domed, "Recoil height peaks at center and tapers smoothly to both horizontal rims")
+	check(long_pull.raised and long_pull.base_fixed, "Recoil thickens upward while the bottom height stays fixed")
 	check(max_offset() < 0.001, "Multiple rebounds eventually settle at original shape")
 
 func check_floor_safety() -> void:
@@ -173,7 +189,7 @@ func check_floor_safety() -> void:
 	check(safe, "Forward, sideways, diagonal stretch and recoil stay above the base")
 	check(retained, "Upper surface retains thickness instead of collapsing onto the floor")
 	var world_floor: float = blob._external_mesh_instance.to_global(Vector3(0, floor_y, 0)).y
-	check(world_floor > main._board.position.y + main._board.mesh.height * 0.5 + 0.001, "Model and board retain a small depth separation")
+	check(world_floor > main._get_model_aabb(main._board).end.y + 0.001, "Model and board retain a small depth separation")
 	blob.reset_deformation()
 	var point := screen_point()
 	main._begin_pointer(point, true, MOUSE_BUTTON_LEFT)

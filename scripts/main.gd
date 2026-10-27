@@ -25,7 +25,7 @@ var _camera_target_y: float = 2.8
 var _camera_current_dist: float = 4.5
 var _camera_current_y: float = 2.8
 var _camera_azimuth: float = PI * 0.5
-var _camera_polar: float = 0.85
+var _camera_polar: float = 1.05
 var _is_rotating := false
 var _last_mouse_pos := Vector2.ZERO
 
@@ -39,6 +39,7 @@ var _camera_retract: float = 1.0
 var _base_camera_dist: float = 4.5
 var _base_camera_y: float = 2.8
 var _look_at_target := Vector3(0.0, 1.0, 0.0)
+var _backdrop_material: ShaderMaterial
 var _board: Node3D
 var _board_source_size := Vector3(1.349289, 0.075418, 1.349289)
 
@@ -239,10 +240,10 @@ func _build_environment() -> void:
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color("#8b6f47")
+	environment.background_color = Color("#f8c5cc")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#7a5c3a")
-	environment.ambient_light_energy = 0.25
+	environment.ambient_light_color = Color("#fff1e4")
+	environment.ambient_light_energy = 0.32
 	world_environment.environment = environment
 	add_child(world_environment)
 
@@ -254,13 +255,14 @@ func _build_environment() -> void:
 	add_child(_camera)
 	_camera.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
 
-	# 主光源 - 降低强度
+	# Upper-left key; its shadow falls toward the lower right.
 	var key_light := DirectionalLight3D.new()
 	key_light.name = "WarmKeyLight"
-	key_light.rotation_degrees = Vector3(-55.0, -20.0, 0.0)
-	key_light.light_color = Color("#ffe8c8")
-	key_light.light_energy = 0.8
+	key_light.rotation_degrees = Vector3(-52.0, -142.0, 0.0)
+	key_light.light_color = Color("#fff4e8")
+	key_light.light_energy = 0.6 #主光线
 	key_light.shadow_enabled = true
+	key_light.shadow_opacity = 0.55
 	add_child(key_light)
 
 	# 补光 - 减少阴影
@@ -268,30 +270,29 @@ func _build_environment() -> void:
 	fill_light.name = "FillLight"
 	fill_light.rotation_degrees = Vector3(-30.0, 45.0, 0.0)
 	fill_light.light_color = Color("#fff5e6")
-	fill_light.light_energy = 0.4
+	fill_light.light_energy = 0.12
 	fill_light.shadow_enabled = false
 	add_child(fill_light)
 
-	# 前部柔光
+	# Broad shadow-free frontal fill lifts the face without another cast shadow.
 	var front_light := DirectionalLight3D.new()
 	front_light.name = "FrontLight"
-	front_light.rotation_degrees = Vector3(-10.0, 0.0, 0.0)
+	front_light.rotation_degrees = Vector3(-22.0, 0.0, 0.0)
 	front_light.light_color = Color("#ffffff")
-	front_light.light_energy = 0.3
+	front_light.light_energy = 0.1  #补光
 	front_light.shadow_enabled = false
 	add_child(front_light)
 
 func _build_stage() -> void:
-	# Keep the original large ground plane for the scene background color. The
-	# authored bottom is an object placed above it, not a replacement for it.
+	# Large ground carries the pink studio backdrop and analytic contact shadow.
+	# Keep it separate from the authored wood base.
 	var ground := MeshInstance3D.new()
 	var ground_mesh := PlaneMesh.new()
 	ground_mesh.size = Vector2(200.0, 200.0)
 	ground.mesh = ground_mesh
-	var ground_material := StandardMaterial3D.new()
-	ground_material.albedo_color = Color("#c9a87c")
-	ground_material.roughness = 0.92
-	ground.material_override = ground_material
+	_backdrop_material = ShaderMaterial.new()
+	_backdrop_material.shader = preload("res://shaders/pink_backdrop.gdshader")
+	ground.material_override = _backdrop_material
 	ground.position.y = -0.035
 	add_child(ground)
 
@@ -325,6 +326,8 @@ func _resize_board() -> void:
 	var board_y := _board.position.y
 	var screen_width_world := _calculate_screen_width_at_y(board_y)
 	var target_diameter := screen_width_world * 1.2
+	if _backdrop_material != null:
+		_backdrop_material.set_shader_parameter("board_radius", target_diameter * 0.5)
 	if _board is MeshInstance3D:
 		var board_mesh := _board.mesh as CylinderMesh
 		if board_mesh != null:
@@ -335,6 +338,7 @@ func _resize_board() -> void:
 	# match the same screen coverage as the old generated cylinder.
 	var authored_diameter := maxf(_board_source_size.x, _board_source_size.z)
 	_board.scale = Vector3.ONE * (target_diameter / authored_diameter)
+	_board.position.y = 0.25 - _board_source_size.y * _board.scale.y * 0.5
 
 func _calculate_screen_width_at_y(y: float) -> float:
 	if _camera == null:

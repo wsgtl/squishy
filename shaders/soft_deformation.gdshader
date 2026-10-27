@@ -9,6 +9,8 @@ uniform bool has_normal_texture = false;
 uniform float normal_strength = 1.0;
 uniform float material_roughness = 0.6;
 uniform float material_metallic = 0.0;
+uniform float dent_shadow_strength : hint_range(0.0, 0.8) = 0.225;
+varying float dent_shadow;
 uniform vec3 model_center;
 uniform vec3 model_size = vec3(1.0);
 uniform float model_radius = 1.0;
@@ -23,6 +25,7 @@ uniform float squash_strength = 0.10;
 uniform vec3 pull = vec3(0.0);
 uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
 uniform float stretch_amount = 0.0;
+uniform vec4 stretch_shape = vec4(1.0, 0.0, 1.0, 1.0);
 
 uniform int trail_count = 0;
 uniform vec3 trail_points[20];
@@ -45,9 +48,10 @@ vec3 dent_at(vec3 p, vec3 point, vec3 normal, float amount) {
 	return normal * (rim - dent) * depth * clamp(amount, -0.1, 1.0) * depth_mask;
 }
 
-vec3 deform(vec3 p) {
+vec3 deform(vec3 p, out vec3 contact_offset) {
 	vec3 relative = p - anchor_point;
-	vec3 offset = dent_at(p, anchor_point, anchor_normal, press_amount);
+	vec3 offset = vec3(0.0);
+	if (abs(press_amount) > 0.0) { offset = dent_at(p, anchor_point, anchor_normal, press_amount); }
 	float max_squared = dot(offset, offset);
 	float weight_sum = max_squared > 0.0 ? 1.0 : 0.0;
 	vec3 weighted_offset = offset * weight_sum;
@@ -73,6 +77,7 @@ vec3 deform(vec3 p) {
 		}
 	}
 	offset = weighted_offset / max(weight_sum, 1.0);
+	contact_offset = offset;
 	float bottom = model_center.y - model_size.y * 0.5;
 	float squash = clamp(squash_amount * squash_strength, -0.04, 0.18);
 	float spread = inversesqrt(1.0 - squash) - 1.0;
@@ -82,18 +87,26 @@ vec3 deform(vec3 p) {
 		vec3 direction = stretch_axis;
 		vec3 centered = p - model_center;
 		float strain = pull_length / (model_radius * 2.0);
-		float factor = strain >= 0.0 ? 1.0 + strain : max(0.35, exp(strain));
-		float neck_strength = smoothstep(0.65, 2.6, pull_length / model_radius);
-		float half_extent = max(dot(abs(direction), model_size * 0.5), model_radius * 0.01);
+		float factor = stretch_shape.x;
+		float neck_strength = stretch_shape.y;
+		float half_extent = stretch_shape.z;
 		float along = dot(centered, direction);
 		float axis_position = along / half_extent;
 		float neck_weight = exp(-0.5 * (axis_position / 0.36) * (axis_position / 0.36));
-		float thin = mix(inversesqrt(factor), 1.0, neck_strength * (1.0 - neck_weight));
+		float thin = mix(stretch_shape.w, 1.0, neck_strength * (1.0 - neck_weight));
 		thin = max(0.16, thin * (1.0 - 0.82 * neck_strength * neck_weight));
 		float strain_profile = mix(axis_position, tanh(axis_position * 2.2) / tanh(2.2), neck_strength * 0.8);
 		float stretched_along = along + (factor - 1.0) * half_extent * strain_profile;
 		vec3 stretched = direction * stretched_along + (centered - direction * along) * thin;
-		stretched.y = bottom - model_center.y + (p.y - bottom) * thin;
+		// Recoil also rises upward; the bottom remains the thickness pivot.
+		float height_scale = thin;
+		if (strain < 0.0) {
+			vec2 normalized_position = clamp(abs(centered.xz) / max(model_size.xz * 0.5, vec2(model_radius * 0.01)), vec2(0.0), vec2(1.0));
+			vec2 dome_axes = cos(normalized_position * 1.57079632679);
+			float dome = dome_axes.x * dome_axes.y;
+			height_scale = 1.0 + (thin - 1.0) * 1.75 * dome * dome;
+		}
+		stretched.y = bottom - model_center.y + (p.y - bottom) * height_scale;
 		float grab_sigma = model_radius * (0.75 + softness * 0.25);
 		float grab = exp(-dot(relative, relative) / (2.0 * grab_sigma * grab_sigma));
 		offset += stretched - centered + pull * (0.10 + grab * 0.15);
@@ -114,17 +127,30 @@ void vertex() {
 	vec3 reference = abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
 	vec3 t = normalize(cross(reference, n));
 	vec3 b = cross(n, t);
+	// Use the imported tangent frame for the same two derivative samples.
+	// This avoids two extra full field evaluations for normal-map tangents.
+	if (has_normal_texture) {
+		t = normalize(TANGENT);
+		b = normalize(BINORMAL);
+	}
 	float epsilon = model_radius * 0.002;
-	vec3 deformed = deform(p);
-	vec3 dt = deform(p + t * epsilon) - deformed;
-	vec3 db = deform(p + b * epsilon) - deformed;
+	vec3 contact_offset;
+	vec3 scratch_offset;
+	vec3 deformed = deform(p, contact_offset);
+	// Use only local press displacement: global squash and stretch must not
+	// darken the whole object. Reuse the field evaluation already used to render.
+	float contact_radius = model_radius * finger_width * (0.85 + softness * 0.25);
+	float inward_depth = max(-dot(contact_offset, n), 0.0);
+	dent_shadow = 1.0 - exp(-inward_depth / max(contact_radius, 1e-6));
+	vec3 dt = deform(p + t * epsilon, scratch_offset) - deformed;
+	vec3 db = deform(p + b * epsilon, scratch_offset) - deformed;
 	vec3 new_normal = cross(dt, db);
 	if (dot(new_normal, new_normal) > 1e-20) {
-		NORMAL = normalize(new_normal);
+		NORMAL = normalize(new_normal) * (dot(cross(t, b), n) < 0.0 ? -1.0 : 1.0);
 	}
 	if (has_normal_texture) {
-		vec3 deformed_tangent = deform(p + TANGENT * epsilon) - deformed;
-		vec3 deformed_binormal = deform(p + BINORMAL * epsilon) - deformed;
+		vec3 deformed_tangent = dt;
+		vec3 deformed_binormal = db;
 		vec3 tangent_projected = deformed_tangent - NORMAL * dot(NORMAL, deformed_tangent);
 		vec3 binormal_projected = deformed_binormal - NORMAL * dot(NORMAL, deformed_binormal);
 		TANGENT = length(tangent_projected) > 1e-8 ? normalize(tangent_projected) : t;
@@ -138,7 +164,10 @@ void fragment() {
 	if (has_albedo_texture) {
 		color *= texture(albedo_texture, UV);
 	}
-	ALBEDO = color.rgb;
+	float cavity = clamp(dent_shadow, 0.0, 1.0) * dent_shadow_strength;
+	ALBEDO = color.rgb * (1.0 - cavity);
+	AO = 1.0 - cavity;
+	AO_LIGHT_AFFECT = 0.35;
 	if (has_normal_texture) {
 		NORMAL_MAP = texture(normal_texture, UV).rgb;
 		NORMAL_MAP_DEPTH = normal_strength;
