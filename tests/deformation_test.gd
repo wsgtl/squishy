@@ -595,7 +595,29 @@ func _run() -> void:
 	print("DEFORMATION TESTS: ", "PASS" if failures == 0 else "FAIL", " (", failures, " failures)")
 	quit(0 if failures == 0 else 1)
 
+func check_doodle_opacity() -> void:
+	var canvas = load("res://scripts/doodle_canvas.gd").new()
+	var uv := Vector2(0.5, 0.5)
+	var pixel := Vector2i(511, 511)
+	for opacity in [0.2, 0.5, 0.8]:
+		canvas.clear()
+		canvas.color = Color(0.8, 0.1, 0.2, opacity)
+		canvas.begin_stroke()
+		for i in range(30):
+			canvas.stamp(uv + Vector2(float(i % 3) / 1024.0, 0.0))
+		check(absf(canvas.image.get_pixelv(pixel).a - opacity) < 0.005, "Overlapping samples preserve stroke opacity: " + str(opacity))
+		canvas.end_stroke()
+		canvas.begin_stroke()
+		canvas.stamp(uv)
+		canvas.end_stroke()
+		check(absf(canvas.image.get_pixelv(pixel).a - (1.0 - pow(1.0 - opacity, 2))) < 0.01, "Separate strokes still layer opacity: " + str(opacity))
+	canvas.begin_stroke()
+	canvas.stamp(uv)
+	canvas.clear()
+	check(canvas.image.get_pixelv(pixel).a == 0.0 and canvas._stroke_base.is_empty(), "Clear discards active stroke coverage")
+
 func check_doodle() -> void:
+	check_doodle_opacity()
 	main._set_doodle_enabled(true)
 	var center := screen_point()
 	var hit: Dictionary = main._raycast_blob(center, true)

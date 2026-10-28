@@ -111,6 +111,9 @@ var _grip_shake_vertical_phase := 0.0
 var _grip_shake_time := 0.0
 var _grip_shake_duration := 0.0
 var _grip_shake_amplitude := 0.0
+const GRIP_HAPTIC_INTERVAL := 0.03
+const GRIP_HAPTIC_MAX_STRENGTH := 0.18
+var _grip_haptic_cooldown := 0.0
 var _grip_haptic_active := false
 var _grip_rng := RandomNumberGenerator.new()
 
@@ -546,6 +549,7 @@ func _step_grip(delta: float) -> void:
 
 # One random, smooth left/right pulse per cycle; only a scalar is sent to the GPU.
 func _step_grip_shake(delta: float) -> void:
+	_grip_haptic_cooldown = maxf(0.0, _grip_haptic_cooldown - delta)
 	if not _grip_held or grip_amount < 0.94:
 		_grip_shake *= exp(-30.0 * delta)
 		_grip_shake_vertical *= exp(-30.0 * delta)
@@ -564,8 +568,8 @@ func _step_grip_shake(delta: float) -> void:
 		_grip_shake_vertical_phase = _grip_rng.randf_range(-PI, PI)
 		if _grip_rng.randf() < 0.5:
 			_grip_shake_amplitude *= -1.0
-		var strength := absf(_grip_shake_amplitude) / (_model_radius * 0.022) * smoothstep(0.94, 1.0, grip_amount)
-		_grip_haptic(strength, _grip_shake_duration)
+	var strength := absf(_grip_shake_amplitude) / (_model_radius * 0.022) * smoothstep(0.94, 1.0, grip_amount)
+	_grip_haptic(strength, _grip_shake_duration)
 	_grip_shake_time = minf(_grip_shake_time + delta, _grip_shake_duration)
 	var phase := _grip_shake_time / _grip_shake_duration
 	var envelope := pow(sin(PI * phase), 2.0) * smoothstep(0.94, 1.0, grip_amount)
@@ -573,17 +577,20 @@ func _step_grip_shake(delta: float) -> void:
 	_grip_shake_vertical = _grip_shake_amplitude * _grip_shake_vertical_ratio * sin(TAU * phase + _grip_shake_vertical_phase) * envelope
 
 func _grip_haptic(strength: float, duration: float) -> void:
+	if _grip_haptic_cooldown > 0.0 or strength < 0.05:
+		return
+	_grip_haptic_cooldown = GRIP_HAPTIC_INTERVAL
 	_grip_haptic_active = true
-	var milliseconds := maxi(1, roundi(duration * 1000.0))
+	var level := clampf(strength, 0.0, 1.0)
+	# Sparse short taps; web vibration has no amplitude control.
+	var milliseconds := clampi(roundi(duration * 1000.0 * 0.1 * (0.5 + 0.5 * level)), 8, 18)
 	if OS.has_feature("web"):
-		# Browsers expose duration only; pulse duty follows visual shake strength.
-		var on := maxi(1, roundi(milliseconds * 0.5 * strength))
-		var gap := maxi(1, milliseconds - on * 2)
-		JavaScriptBridge.eval("try { if (navigator.vibrate) navigator.vibrate([%d,%d,%d]); } catch (e) {}" % [on, gap, on])
+		JavaScriptBridge.eval("try { if (navigator.vibrate) navigator.vibrate(1); } catch (e) {}")
 	elif OS.get_name() == "Android" or OS.get_name() == "iOS":
-		Input.vibrate_handheld(milliseconds, strength)
+		Input.vibrate_handheld(milliseconds, GRIP_HAPTIC_MAX_STRENGTH * level)
 
 func _stop_grip_haptic() -> void:
+	_grip_haptic_cooldown = 0.0
 	if not _grip_haptic_active:
 		return
 	_grip_haptic_active = false

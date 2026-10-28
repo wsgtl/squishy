@@ -96,11 +96,13 @@ func _input(event: InputEvent) -> void:
 			_draw_to(event.position)
 		elif event is InputEventMouseButton and _drawing_touch == -1 and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			_draw_to(event.position)
+			_doodle.end_stroke()
 			_drawing = false
 		elif event is InputEventScreenDrag and event.index == _drawing_touch:
 			_draw_to(event.position)
 		elif event is InputEventScreenTouch and event.index == _drawing_touch and not event.pressed:
 			_draw_to(event.position)
+			_doodle.end_stroke()
 			_drawing = false
 		# An owned stroke never becomes a press, stretch, or UI click.
 		get_viewport().set_input_as_handled()
@@ -197,6 +199,7 @@ func _move_pointer(screen_position: Vector2) -> void:
 		_press_pointer_dirty = true
 
 func _finish_gesture() -> void:
+	_doodle.end_stroke()
 	_drawing = false
 	if _dragging:
 		_end_pointer()
@@ -900,6 +903,7 @@ func _begin_drawing(point: Vector2, touch_id: int) -> bool:
 	_drawing = true
 	_drawing_touch = touch_id
 	_drawing_last = point
+	_doodle.begin_stroke()
 	_doodle.stamp(hit.uv)
 	return true
 
