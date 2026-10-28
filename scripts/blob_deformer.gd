@@ -151,6 +151,7 @@ func _ready() -> void:
 		_build_mesh_data()
 		_rebuild_surface()
 	_setup_gpu()
+	reset_deformation()
 
 func _configure_collision_body() -> void:
 	if _collision_body == null or _external_mesh_instance == null:
@@ -323,6 +324,7 @@ func begin_interaction(world_point: Vector3, stretch: bool, rest_point: Vector3 
 		_grab_normal_a = _anchor_normal
 		_grab_point_b = Vector3(2.0 * _model_center.x - _anchor_point.x, _anchor_point.y, 2.0 * _model_center.z - _anchor_point.z)
 		_grab_normal_b = Vector3(-_anchor_normal.x, _anchor_normal.y, -_anchor_normal.z)
+	_sync_gpu()
 
 func set_stretch_contacts(point_a: Vector3, normal_a: Vector3, point_b: Vector3, normal_b: Vector3) -> void:
 	_grab_point_a = point_a
@@ -397,6 +399,20 @@ func _trigger_vibration() -> void:
 			Input.start_joy_vibration(0, vibration_strength, vibration_strength, vibration_strength * 0.2)
 
 func reset_deformation() -> void:
+	# The rest state is complete and independent of the preceding gesture.
+	_anchor_point = _model_center + Vector3.UP * _model_size.y * 0.5
+	_anchor_target = _anchor_point
+	_anchor_normal = Vector3.UP
+	_normal_target = Vector3.UP
+	_drag_origin = _anchor_point
+	_last_trail_point = _anchor_point
+	_grab_point_a = _anchor_point
+	_grab_point_b = _anchor_point
+	_grab_normal_a = Vector3.UP
+	_grab_normal_b = Vector3.UP
+	_rebound_axis = Vector3.RIGHT
+	_press_rebound_direction = Vector3.RIGHT
+	_recover_timer = 0.0
 	_trail_retire_times.clear()
 	_trail_sample_elapsed = 1.0
 	_trail_ends.clear()
@@ -711,7 +727,7 @@ func _physics_process(delta: float) -> void:
 	_sync_gpu()
 
 func _deformation_axis() -> Vector3:
-	return _rebound_axis if _stretch_recovering else _smooth_pull.normalized()
+	return _rebound_axis if _stretch_recovering else (_smooth_pull.normalized() if _smooth_pull.length_squared() > 0.0000000001 else Vector3.RIGHT)
 
 func _signed_stretch() -> float:
 	return _smooth_pull.dot(_deformation_axis())

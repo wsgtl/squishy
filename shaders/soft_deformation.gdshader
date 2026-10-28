@@ -188,7 +188,8 @@ vec3 grip_offset(vec3 p) {
 vec3 deform(vec3 p, out vec3 contact_offset) {
 	vec3 relative = p - anchor_point;
 	vec3 offset = vec3(0.0);
-	if (abs(press_amount) > 0.0) { offset = dent_at(p, anchor_point, anchor_normal, press_amount); }
+	// A zero pressure is a valid zero displacement, not a different code path.
+	offset = dent_at(p, anchor_point, anchor_normal, press_amount);
 	float max_squared = dot(offset, offset);
 	float weight_sum = max_squared > 0.0 ? 1.0 : 0.0;
 	vec3 weighted_offset = offset * weight_sum;

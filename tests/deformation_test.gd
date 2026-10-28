@@ -395,6 +395,7 @@ func _run() -> void:
 	blob.set_physics_process(false)
 	blob.rebound_vibration = 0.0
 	main._physics_process(0.016)
+	await check_reset_then_stretch()
 	var center := screen_point()
 	check(blob._positions.size() == 5925, "Production mooncake mesh is deformable")
 	check(not main._raycast_blob(center).is_empty(), "Screen ray hits real visible surface")
@@ -994,3 +995,23 @@ func grip_unrolled_height(p: Vector3) -> float:
 	var x: float = d.dot(blob._grip_axis) - blob._grip_shake + blob._grip_width * 0.20 * z / blob._grip_extent * pose.w
 	var y: float = d.y - blob._model_radius * 1.8 * smoothstep(0.0, 1.0, blob.grip_stage)
 	return -sin(roll) * x + cos(roll) * y
+
+func check_reset_then_stretch() -> void:
+	for after_doodle in [false, true]:
+		if after_doodle:
+			main._set_doodle_enabled(true)
+			main._set_doodle_enabled(false)
+			main._process(main.CAMERA_RETURN_DURATION)
+		blob.reset_deformation()
+		check(blob._shader_material.get_shader_parameter("stretch_axis").is_equal_approx(Vector3.RIGHT), "Reset uploads a valid nonzero stretch axis")
+		var hit: Dictionary = main._raycast_blob(screen_point(), true)
+		blob.begin_interaction(hit.position, true, hit.rest_point, hit.local_normal)
+		check(blob._shader_material.get_shader_parameter("anchor_point").is_equal_approx(hit.rest_point), "Stretch contact reaches GPU immediately after reset")
+		blob.update_stretch_vector(Vector3.RIGHT * 0.6)
+		advance(0.3)
+		var finite := true
+		for p in blob._rest_positions:
+			finite = finite and blob._target_offset_for(p).is_finite()
+		check(finite and blob._press_amount == 0.0, "Direct stretch works without prior press; after doodle: " + str(after_doodle))
+		await screenshot("reset-stretch-" + str(after_doodle))
+		blob.reset_deformation()
