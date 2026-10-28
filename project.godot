@@ -25,7 +25,7 @@ window/handheld/orientation=1
 
 [input_devices]
 
-pointing/emulate_mouse_from_touch=false
+pointing/emulate_mouse_from_touch=true
 
 [physics]
 

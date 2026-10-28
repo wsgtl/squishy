@@ -3,7 +3,7 @@ extends SceneTree
 # Desktop hardware events must not alter synthetic Shift/touch sequences.
 class SyntheticInputFilter extends Node:
 	func _input(event: InputEvent) -> void:
-		if event.device != 42:
+		if event.device != 42 and event.device != InputEvent.DEVICE_ID_EMULATION:
 			get_viewport().set_input_as_handled()
 
 var main: Node3D
@@ -588,6 +588,7 @@ func _run() -> void:
 		advance(recovery * 8.0)
 		check(max_offset() < 0.001, "Recovery stable at extreme parameters: " + str(recovery))
 	await check_modals()
+	await check_touch_ui()
 	await check_doodle()
 	print("DEFORMATION TESTS: ", "PASS" if failures == 0 else "FAIL", " (", failures, " failures)")
 	quit(0 if failures == 0 else 1)
@@ -745,3 +746,93 @@ func check_modals() -> void:
 	check(main._camera_returning and main._camera.position.distance_to(exit_position) > 0.01, "Camera angle and distance interpolate during return")
 	main._process(main.CAMERA_RETURN_DURATION)
 	check(zoom.value == 1 and main._doodle_zoom == 1 and absf(main._camera.position.distance_to(main._look_at_target) - initial_camera) < 0.0001, "Exiting doodle restores the normal camera size and zoom control")
+
+func touch_event_at(point: Vector2, pressed: bool) -> void:
+	var touch := InputEventScreenTouch.new()
+	touch.index = 0
+	touch.position = point
+	touch.pressed = pressed
+	feed_input(touch)
+
+func touch_drag_to(point: Vector2, relative: Vector2) -> void:
+	var drag := InputEventScreenDrag.new()
+	drag.index = 0
+	drag.position = point
+	drag.relative = relative
+	feed_input(drag)
+
+func check_touch_ui() -> void:
+	main._toggle_param_panel()
+	await process_frame
+	await process_frame
+	var content: ScrollContainer = main._param_panel.get_meta("content")
+	var parameter_slider := content.find_children("*", "HSlider", true, false)[0] as HSlider
+	var parameter_rect := parameter_slider.get_global_rect()
+	var first := Vector2(parameter_rect.position.x + parameter_rect.size.x * 0.3, parameter_rect.get_center().y)
+	var last := Vector2(parameter_rect.position.x + parameter_rect.size.x * 0.7, first.y)
+	var old_parameter := parameter_slider.value
+	touch_event_at(first, true)
+	await process_frame
+	var first_value := parameter_slider.value
+	touch_drag_to(last, last - first)
+	await process_frame
+	touch_event_at(last, false)
+	await process_frame
+	check(parameter_slider.value > first_value and not main._dragging and not main._is_rotating, "Real touch drags parameter slider without rotating the model")
+	parameter_slider.value = old_parameter
+	main._close_param_panel()
+	main._set_doodle_enabled(true)
+	await process_frame
+	await process_frame
+	var slider := main.find_child("DoodleSizeSlider", true, false) as VSlider
+	var rect := slider.get_global_rect()
+	var start := Vector2(rect.get_center().x, rect.position.y + rect.size.y * 0.7)
+	var finish := Vector2(start.x, rect.position.y + rect.size.y * 0.25)
+	touch_event_at(start, true)
+	await process_frame
+	var previous := slider.value
+	touch_drag_to(finish, finish - start)
+	await process_frame
+	touch_event_at(finish, false)
+	await process_frame
+	check(slider.value > previous + 5 and not main._drawing and not main._dragging, "Real touch drags the brush slider without painting or pressing")
+	slider.value = 10
+	var button := main.find_child("DoodleColorPicker", true, false) as ColorPickerButton
+	var center := button.get_global_rect().get_center()
+	touch_event_at(center, true)
+	await process_frame
+	touch_event_at(center, false)
+	await process_frame
+	await process_frame
+	check(button.get_popup().visible, "Real touch opens the color picker")
+	var picker := button.get_picker()
+	var nodes: Array[Node] = [picker]
+	var channel: HSlider
+	while not nodes.is_empty():
+		var node: Node = nodes.pop_back()
+		if node is HSlider and node.is_visible_in_tree():
+			channel = node
+			break
+		nodes.append_array(node.get_children(true))
+	check(channel != null, "Color picker exposes a visible RGBA slider for input verification")
+	if channel != null:
+		var before := channel.value
+		var channel_rect := channel.get_global_rect()
+		var local_point := Vector2(channel_rect.position.x + channel_rect.size.x * 0.35, channel_rect.get_center().y)
+		# Embedded popup controls belong to their own viewport.
+		var event := InputEventMouseButton.new()
+		event.device = InputEvent.DEVICE_ID_EMULATION
+		event.position = local_point
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = true
+		button.get_popup().push_input(event)
+		event = event.duplicate()
+		event.pressed = false
+		button.get_popup().push_input(event)
+		await process_frame
+		check(channel.value != before, "Color picker channel responds to touch-emulated mouse input")
+	button.get_popup().hide()
+	button.color = Color.BLACK
+	button.color_changed.emit(Color.BLACK)
+	main._set_doodle_enabled(false)
+	main._process(main.CAMERA_RETURN_DURATION)

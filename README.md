@@ -148,3 +148,15 @@ godot --headless --path . --script tests/performance_test.gd
 ## 参数弹窗
 
 「参数」入口打开带半透明背景的全屏弹窗，点击内容区外背景或右上角「关闭」即可关闭，内容支持滚动。参数文字已放大加粗，滑动条、拖动圆点和开关使用放大样式。此弹窗用于形变参数调整，与涂鸦模式的两侧工具栏分开。
+
+
+手机触摸输入：`project.godot` 开启 `pointing/emulate_mouse_from_touch`，让 Godot 原生滑条、选色区及 RGBA 通道响应触摸拖动。模型交互在 `_input` 与 `_unhandled_input` 中跳过 `InputEvent.DEVICE_ID_EMULATION` 的鼠标事件，继续使用真实触摸 ID 处理按压、双指拉伸及绘制，避免同一触摸被重复处理。修改此设置后需重新导出并更新 Web 产物。
+
+
+### 移动浏览器加载与双指手势
+
+Web 导出使用 `web/shell.html` 自定义页面，保持单线程导出。由于当前不实现存档，启动配置的 `persistentPaths` 为空，不等待 IndexedDB 持久化初始化。加载页显示下载进度与初始化状态，45 秒无进度更新时提供提示及重新加载按钮；超时提示不会取消仍在进行的加载。
+
+画布显式设置 `touch-action: none`，并用非 passive 监听器阻止 `touchstart`、`touchmove` 和 iOS `gesture*` 的浏览器默认手势，不阻止事件传播，仍由 Godot 处理 UI 触摸和模型双指拉伸。第二指落下时，两个接触点均使用稳定表面拾取，避免第一指造成的凹坑干扰命中。
+
+这些处理尚未在夸克真机上验证。若仍卡加载，应记录加载提示、设备和浏览器版本，并检查服务器 WASM/PCK 请求、压缩与缓存；不支持 WebGL 2 / 所需 WebAssembly 能力的内核无法仅靠页面脚本兼容。部署时完整替换同一次导出的 Web 文件，避免旧 HTML/JS 与新 WASM/PCK 混用。

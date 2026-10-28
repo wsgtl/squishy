@@ -79,6 +79,10 @@ func _load_font() -> void:
 # Capture an already-owned gesture before GUI dispatch so releasing over the
 # parameter panel cannot leave the model stuck. New gestures still respect UI.
 func _input(event: InputEvent) -> void:
+	# Native GUI sliders and ColorPicker need touch-generated mouse events.
+	# The model uses real touch IDs, so never process that second event stream.
+	if (event is InputEventMouseButton or event is InputEventMouseMotion) and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if _drawing:
 		if event is InputEventMouseMotion and _drawing_touch == -1:
 			_draw_to(event.position)
@@ -126,6 +130,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Native GUI sliders and ColorPicker need touch-generated mouse events.
+	# The model uses real touch IDs, so never process that second event stream.
+	if (event is InputEventMouseButton or event is InputEventMouseMotion) and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if _doodle_enabled and not _is_rotating and _active_touch_id < 0:
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			if _begin_drawing(event.position, -1):
@@ -137,8 +145,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 	# A second finger must start on the model and outside GUI controls.
 	if event is InputEventScreenTouch and event.pressed and _touches.size() == 1 and _dragging:
-		var second_hit := _raycast_blob(event.position)
-		var first_hit := _raycast_blob(_touches[_active_touch_id])
+		var second_hit := _raycast_blob(event.position, true)
+		var first_hit := _raycast_blob(_touches[_active_touch_id], true)
 		if not second_hit.is_empty() and not first_hit.is_empty():
 			_touches[event.index] = event.position
 			_begin_pointer(_touches[_active_touch_id], true, MOUSE_BUTTON_LEFT)
@@ -1261,7 +1269,7 @@ func _configure_doodle_color_picker(button: ColorPickerButton) -> void:
 			_style_doodle_slider(node, false)
 		elif node is SpinBox:
 			node.custom_minimum_size = Vector2(92, 48)
-		nodes.append_array(node.get_children())
+		nodes.append_array(node.get_children(true))
 	button.get_popup().about_to_popup.connect(func():
 		# Size against the logical viewport so portrait mobile gets a large square.
 		var viewport_size := get_viewport().get_visible_rect().size
