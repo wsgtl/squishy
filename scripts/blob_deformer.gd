@@ -91,6 +91,12 @@ var _indices := PackedInt32Array()
 # Fixed hand span, calibrated against the rest model, never projected length.
 const GRIP_HAND_SPAN_RATIO := 0.54
 
+@export var twist_axis_local := Vector3.ZERO # Zero selects the longer X/Z rest axis so the two short ends twist.
+var _twist_mode := false
+var _twist_direction := 1.0
+var _twist_axis := Vector3.FORWARD
+var _twist_extent := 1.0
+
 var grip_amount := 0.0
 var grip_stage := 0.0
 var _grip_axis := Vector3.RIGHT
@@ -426,6 +432,7 @@ func set_grip_axis(world_right: Vector3) -> void:
 	if is_gripping():
 		return
 	var mesh_node: Node3D = _external_mesh_instance if _external_mesh_instance != null else self
+	_twist_mode = false
 	_grip_axis = mesh_node.global_basis.inverse() * world_right
 	_grip_axis.y = 0.0
 	_grip_axis = _grip_axis.normalized()
@@ -435,6 +442,50 @@ func set_grip_axis(world_right: Vector3) -> void:
 	for p in _rest_positions:
 		_grip_extent = maxf(_grip_extent, absf((p - _model_center).dot(along)))
 		_grip_width = maxf(_grip_width, absf((p - _model_center).dot(_grip_axis)))
+
+func begin_twist() -> void:
+	if is_gripping():
+		return
+	_twist_mode = true
+	_twist_direction = -1.0 if _grip_rng.randf() < 0.5 else 1.0
+	_twist_axis = twist_axis_local.normalized() if twist_axis_local.length_squared() > 0.0001 else (Vector3.RIGHT if _model_size.x >= _model_size.z else Vector3.FORWARD)
+	_twist_extent = 0.000001
+	for p in _rest_positions:
+		_twist_extent = maxf(_twist_extent, absf((p - _model_center).dot(_twist_axis)))
+	_grip_held = true
+
+func _twist_offset(p: Vector3) -> Vector3:
+	var c := p - _model_center
+	var axial := c.dot(_twist_axis)
+	var t := clampf(axial / _twist_extent, -1.0, 1.0)
+	var radial := c - _twist_axis * axial
+	var amount := grip_amount
+	var waist := 1.0 - t * t
+	var angle := _twist_direction * deg_to_rad(105.0) * sin(t * PI * 0.5) * amount
+	# Broad waist compression and rounded end bulges; wrinkles follow a helix.
+	var ends := smoothstep(0.25, 0.90, absf(t))
+	var side := _twist_axis.cross(Vector3.UP).normalized()
+	var side_extent := maxf(absf(side.x) * _model_size.x * 0.5 + absf(side.z) * _model_size.z * 0.5, 0.000001)
+	var ry := radial.y / maxf(_model_size.y * 0.5, 0.000001)
+	var rx := radial.dot(side) / side_extent
+	var rho := sqrt(rx * rx + ry * ry)
+	var theta := atan2(ry, rx) if rho > 0.00001 else 0.0
+	# Integer angular frequencies keep the seam continuous. Axial pitch tightens
+	# at the waist; warped phases and local envelopes avoid parallel grooves.
+	var pitch := PI * (6.0 * t - 2.0 * t * t * t)
+	var warp := 0.65 * sin(2.0 * theta + 3.1 * t) + 0.28 * sin(3.0 * theta - 5.3 * t)
+	var phase := 5.0 * theta - _twist_direction * pitch + warp
+	var secondary := 8.0 * theta - _twist_direction * (pitch * 1.37 + 1.1 * sin(2.7 * t)) + 0.7 * sin(theta + 4.2 * t)
+	var fine := 11.0 * theta - _twist_direction * pitch * 1.85 + 0.9 * sin(3.0 * theta + 2.3 * t)
+	var depth := 0.76 + 0.24 * sin(theta - 4.1 * t)
+	var local_fold := 0.5 + 0.5 * sin(2.0 * theta + 5.7 * t + 0.8)
+	var wave := (0.065 + 0.045 * ends) * sin(phase) * depth + 0.045 * waist * sin(secondary) * local_fold + 0.022 * waist * waist * sin(fine)
+	var wrinkle := wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, absf(t))) * pow(maxf(amount, 0.0), 1.5)
+	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * amount + wrinkle
+	var rotated := radial * cos(angle) + _twist_axis.cross(radial) * sin(angle)
+	var result := rotated + _twist_axis * axial * (1.0 + 0.06 * amount) - c
+	result.y += _model_radius * 1.8 * smoothstep(0.0, 1.0, grip_stage)
+	return result + _grip_axis * _grip_shake + _grip_axis.cross(Vector3.UP) * _grip_shake_vertical
 
 func set_grip_held(held: bool) -> void:
 	_grip_held = held
@@ -548,6 +599,8 @@ func _grip_pose_parameters(amount: float) -> Vector4:
 	return keys[index].lerp(keys[index + 1], smoothstep(0.0, 1.0, phase - index))
 
 func _grip_offset(p: Vector3) -> Vector3:
+	if _twist_mode:
+		return _twist_offset(p)
 	var pose := _grip_pose_parameters(grip_amount)
 	var centered := p - _model_center
 	var along := _grip_axis.cross(Vector3.UP)
@@ -968,6 +1021,10 @@ func _setup_gpu() -> void:
 func _sync_gpu() -> void:
 	if _shader_material == null:
 		return
+	_shader_material.set_shader_parameter("twist_mode", _twist_mode)
+	_shader_material.set_shader_parameter("twist_axis", _twist_axis)
+	_shader_material.set_shader_parameter("twist_extent", _twist_extent)
+	_shader_material.set_shader_parameter("twist_direction", _twist_direction)
 	_shader_material.set_shader_parameter("grip_amount", grip_amount)
 	_shader_material.set_shader_parameter("grip_pose", _grip_pose_parameters(grip_amount))
 	_shader_material.set_shader_parameter("grip_stage", grip_stage)

@@ -20,6 +20,10 @@ uniform vec3 anchor_point;
 uniform vec3 anchor_normal = vec3(0.0, 1.0, 0.0);
 uniform bool raised_rim_press = true;
 uniform float press_amount = 0.0;
+uniform bool twist_mode = false;
+uniform vec3 twist_axis = vec3(0.0, 0.0, -1.0);
+uniform float twist_extent = 1.0;
+uniform float twist_direction = 1.0;
 uniform float grip_amount = 0.0;
 uniform vec4 grip_pose = vec4(0.0);
 uniform float grip_stage = 0.0;
@@ -101,7 +105,40 @@ float grip_finger_profile(float z) {
 	return profile;
 }
 
+vec3 twist_offset(vec3 p) {
+	vec3 c = p - model_center;
+	float axial = dot(c, twist_axis);
+	float t = clamp(axial / twist_extent, -1.0, 1.0);
+	vec3 radial = c - twist_axis * axial;
+	float waist = 1.0 - t * t;
+	float angle = twist_direction * 1.8325957146 * sin(t * 3.14159265359 * 0.5) * grip_amount;
+	float ends = smoothstep(0.25, 0.90, abs(t));
+	vec3 side = normalize(cross(twist_axis, vec3(0.0, 1.0, 0.0)));
+	float side_extent = max(abs(side.x) * model_size.x * 0.5 + abs(side.z) * model_size.z * 0.5, 0.000001);
+	float ry = radial.y / max(model_size.y * 0.5, 0.000001);
+	float rx = dot(radial, side) / side_extent;
+	float rho = sqrt(rx * rx + ry * ry);
+	float theta = rho > 0.00001 ? atan(ry, rx) : 0.0;
+	// Integer angular frequencies keep the seam continuous. Axial pitch tightens
+	// at the waist; warped phases and local envelopes avoid parallel grooves.
+	float pitch = 3.14159265359 * (6.0 * t - 2.0 * t * t * t);
+	float warp = 0.65 * sin(2.0 * theta + 3.1 * t) + 0.28 * sin(3.0 * theta - 5.3 * t);
+	float phase = 5.0 * theta - twist_direction * pitch + warp;
+	float secondary = 8.0 * theta - twist_direction * (pitch * 1.37 + 1.1 * sin(2.7 * t)) + 0.7 * sin(theta + 4.2 * t);
+	float fine = 11.0 * theta - twist_direction * pitch * 1.85 + 0.9 * sin(3.0 * theta + 2.3 * t);
+	float depth = 0.76 + 0.24 * sin(theta - 4.1 * t);
+	float local_fold = 0.5 + 0.5 * sin(2.0 * theta + 5.7 * t + 0.8);
+	float wave = (0.065 + 0.045 * ends) * sin(phase) * depth + 0.045 * waist * sin(secondary) * local_fold + 0.022 * waist * waist * sin(fine);
+	float wrinkle = wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, abs(t))) * pow(max(grip_amount, 0.0), 1.5);
+	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * grip_amount + wrinkle;
+	vec3 rotated = radial * cos(angle) + cross(twist_axis, radial) * sin(angle);
+	vec3 result = rotated + twist_axis * axial * (1.0 + 0.06 * grip_amount) - c;
+	result.y += model_radius * 1.8 * smoothstep(0.0, 1.0, grip_stage);
+	return result + grip_axis * grip_shake + cross(grip_axis, vec3(0.0, 1.0, 0.0)) * grip_shake_vertical;
+}
+
 vec3 grip_offset(vec3 p) {
+	if (twist_mode) { return twist_offset(p); }
 	vec4 pose = grip_pose;
 	vec3 centered = p - model_center;
 	vec3 along = cross(grip_axis, vec3(0.0, 1.0, 0.0));
@@ -232,12 +269,9 @@ void vertex() {
 	vec3 reference = abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
 	vec3 t = normalize(cross(reference, n));
 	vec3 b = cross(n, t);
-	// Use the imported tangent frame for the same two derivative samples.
-	// This avoids two extra full field evaluations for normal-map tangents.
-	if (has_normal_texture) {
-		t = normalize(TANGENT);
-		b = normalize(BINORMAL);
-	}
+	// Geometry derivatives must not change direction across mirrored UV islands.
+	vec3 source_tangent = TANGENT;
+	vec3 source_binormal = BINORMAL;
 	float epsilon = model_radius * 0.002;
 	vec3 contact_offset;
 	vec3 scratch_offset;
@@ -247,19 +281,26 @@ void vertex() {
 	float contact_radius = model_radius * finger_width * (0.85 + softness * 0.25);
 	float inward_depth = max(-dot(contact_offset, n), 0.0);
 	dent_shadow = 1.0 - exp(-inward_depth / max(contact_radius, 1e-6));
-	vec3 dt = deform(p + t * epsilon, scratch_offset) - deformed;
-	vec3 db = deform(p + b * epsilon, scratch_offset) - deformed;
+	// Normalize the difference scale BEFORE the cross product. Otherwise its
+	// squared magnitude scales with epsilon^4 and can underflow on mobile GPUs.
+	vec3 dt = (deform(p + t * epsilon, scratch_offset) - deformed) / epsilon;
+	vec3 db = (deform(p + b * epsilon, scratch_offset) - deformed) / epsilon;
 	vec3 new_normal = cross(dt, db);
-	if (dot(new_normal, new_normal) > 1e-20) {
-		NORMAL = normalize(new_normal) * (dot(cross(t, b), n) < 0.0 ? -1.0 : 1.0);
+	float normal_length_squared = dot(new_normal, new_normal);
+	NORMAL = n;
+	if (normal_length_squared > 0.000001) {
+		NORMAL = new_normal * inversesqrt(normal_length_squared);
 	}
 	if (has_normal_texture) {
-		vec3 deformed_tangent = dt;
-		vec3 deformed_binormal = db;
+		// Transport the authored UV frame through the same surface derivatives.
+		// Preserve mirrored-island handedness without using it for geometry normals.
+		vec3 deformed_tangent = dt * dot(source_tangent, t) + db * dot(source_tangent, b);
 		vec3 tangent_projected = deformed_tangent - NORMAL * dot(NORMAL, deformed_tangent);
-		vec3 binormal_projected = deformed_binormal - NORMAL * dot(NORMAL, deformed_binormal);
-		TANGENT = length(tangent_projected) > 1e-8 ? normalize(tangent_projected) : t;
-		BINORMAL = length(binormal_projected) > 1e-8 ? normalize(binormal_projected) : cross(NORMAL, TANGENT);
+		float tangent_length_squared = dot(tangent_projected, tangent_projected);
+		vec3 fallback_reference = abs(NORMAL.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+		TANGENT = tangent_length_squared > 0.000001 ? tangent_projected * inversesqrt(tangent_length_squared) : normalize(cross(fallback_reference, NORMAL));
+		float handedness = dot(cross(source_tangent, source_binormal), n) < 0.0 ? -1.0 : 1.0;
+		BINORMAL = normalize(cross(NORMAL, TANGENT)) * handedness;
 	}
 	VERTEX = deformed;
 }

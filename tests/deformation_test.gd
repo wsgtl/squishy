@@ -955,8 +955,31 @@ func check_grip() -> void:
 		check(world_offset.dot(main._camera.global_basis.x) < -0.01, "Grip stays screen-horizontal after model rotation: " + str(degrees))
 		blob.cancel_grip()
 	main._model_root.rotation = original_rotation
+	var twist_button := main.find_child("TwistButton", true, false) as Button
+	check(twist_button != null and twist_button.visible, "Twist button is available beside grip")
+	mouse_button(twist_button.get_global_rect().get_center(), true)
+	await process_frame
+	advance(1.2)
+	check(blob._twist_mode and blob.grip_amount > 0.98 and blob._grip_haptic_active, "Held twist reaches its limit and activates shake haptics")
+	var twist_axis: Vector3 = blob._twist_axis
+	var expected_twist_axis := Vector3.RIGHT if blob._model_size.x >= blob._model_size.z else Vector3.FORWARD
+	check(absf(twist_axis.dot(expected_twist_axis)) > 0.999, "Twist turns the two short ends around the model long axis")
+	var radial: Vector3 = Vector3.UP * blob._model_size.y * 0.4
+	var a: Vector3 = blob._model_center + twist_axis * blob._twist_extent * 0.8 + radial
+	var b: Vector3 = blob._model_center - twist_axis * blob._twist_extent * 0.8 + radial
+	var twist_side: Vector3 = twist_axis.cross(Vector3.UP)
+	check((blob._grip_offset(a) - blob._grip_offset(b)).dot(twist_side) * blob._twist_direction > 0.01, "Twist rotates the two ends in opposing directions")
+	main._model_root.rotate_y(0.7)
+	check(blob._twist_axis.is_equal_approx(twist_axis), "Twist axis remains bound to model coordinates")
+	main._model_root.rotation = original_rotation
+	await screenshot("twist-tight")
+	mouse_button(twist_button.get_global_rect().get_center(), false)
+	await process_frame
+	check(not blob._grip_haptic_active and not blob._grip_held, "Twist release immediately stops vibration")
+	advance(2.2)
+	check(not blob.is_gripping(), "Twist settles after release")
 	main._set_doodle_enabled(true)
-	check(not button.visible and not blob._grip_held, "Doodle mode hides and cancels grip")
+	check(not button.visible and not twist_button.visible and not blob._grip_held, "Doodle mode hides and cancels grip")
 	main._set_doodle_enabled(false)
 	main._process(main.CAMERA_RETURN_DURATION)
 

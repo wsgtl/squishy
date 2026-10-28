@@ -21,6 +21,7 @@ const CAMERA_RETURN_DURATION := 0.55
 var _camera_returning := false
 var _camera_return_elapsed := 0.0
 
+var _twist_button: Button
 var _grip_button: Button
 
 var _camera: Camera3D
@@ -764,20 +765,45 @@ func _build_hud() -> void:
 	_grip_button.text = "按住挤压"
 	root.add_child(_grip_button)
 	_grip_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_grip_button.offset_left = -120
-	_grip_button.offset_right = 120
+	_grip_button.offset_left = -250
+	_grip_button.offset_right = -10
 	_grip_button.offset_top = -150
 	_grip_button.offset_bottom = -62
 	_grip_button.add_theme_font_override("font", _cjk_font)
 	_grip_button.add_theme_font_size_override("font_size", 28)
 	_grip_button.focus_mode = Control.FOCUS_NONE
 	_grip_button.button_down.connect(func():
-		if not _doodle_enabled:
+		if not _doodle_enabled and not _blob.is_gripping():
 			_finish_gesture()
 			_blob.set_grip_axis(_camera.global_basis.x)
 			_blob.set_grip_held(true)
 	)
-	_grip_button.button_up.connect(func(): _blob.set_grip_held(false))
+	_grip_button.button_up.connect(func():
+		if not _blob._twist_mode:
+			_blob.set_grip_held(false)
+	)
+	_twist_button = Button.new()
+	_twist_button.name = "TwistButton"
+	_twist_button.text = "按住扭转"
+	root.add_child(_twist_button)
+	_twist_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_twist_button.offset_left = 10
+	_twist_button.offset_right = 250
+	_twist_button.offset_top = -150
+	_twist_button.offset_bottom = -62
+	_twist_button.add_theme_font_override("font", _cjk_font)
+	_twist_button.add_theme_font_size_override("font_size", 28)
+	_twist_button.focus_mode = Control.FOCUS_NONE
+	_twist_button.button_down.connect(func():
+		if not _doodle_enabled and not _blob.is_gripping():
+			_finish_gesture()
+			_blob.set_grip_axis(_camera.global_basis.x)
+			_blob.begin_twist()
+	)
+	_twist_button.button_up.connect(func():
+		if _blob._twist_mode:
+			_blob.set_grip_held(false)
+	)
 	_style_parameter_controls(content)
 
 	var footer := Label.new()
@@ -895,6 +921,7 @@ func _set_doodle_enabled(enabled: bool) -> void:
 	_finish_gesture()
 	_doodle_enabled = enabled
 	_grip_button.visible = not enabled
+	_twist_button.visible = not enabled
 	if enabled:
 		_blob.cancel_grip()
 	if enabled:
