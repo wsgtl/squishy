@@ -587,6 +587,7 @@ func _run() -> void:
 		blob.end_interaction()
 		advance(recovery * 8.0)
 		check(max_offset() < 0.001, "Recovery stable at extreme parameters: " + str(recovery))
+	await check_grip()
 	await check_modals()
 	await check_touch_ui()
 	await check_doodle()
@@ -836,3 +837,137 @@ func check_touch_ui() -> void:
 	button.color_changed.emit(Color.BLACK)
 	main._set_doodle_enabled(false)
 	main._process(main.CAMERA_RETURN_DURATION)
+
+func check_grip() -> void:
+	blob.reset_deformation()
+	var button := main.find_child("GripButton", true, false) as Button
+	check(button != null and button.visible, "Grip button is available outside doodle mode")
+	var point := button.get_global_rect().get_center()
+	mouse_button(point, true)
+	await process_frame
+	advance(0.08)
+	var initial := blob.grip_amount
+	check(initial > 0 and initial < 0.3 and blob._grip_shake == 0.0, "Grip starts smoothly without an immediate full squeeze")
+	advance(0.8)
+	check(blob.grip_amount > 0.98 and blob._interaction_mode == -1, "Holding the button reaches full grip without regular press interaction")
+	var top := blob._model_center + Vector3.UP * blob._model_size.y * 0.5
+	var side := top + Vector3.RIGHT * blob._model_size.x * 0.4
+	check(blob._target_offset_for(side).x < -blob._model_size.x * 0.14, "Grip compresses the entire middle across its width")
+	var bottom := blob._model_center - Vector3.UP * blob._model_size.y * 0.5
+	var lower_side := bottom + Vector3.RIGHT * blob._model_size.x * 0.4
+	check(blob._target_offset_for(lower_side).x < -blob._model_size.x * 0.14 and blob._target_offset_for(bottom).y > blob._model_radius * 0.5, "Grip lifts and compresses the lower half as well as the upper half")
+	var end := blob._model_center + Vector3(0, blob._model_size.y * 0.5, blob._model_size.z * 0.48)
+	var middle_thickness := (top + blob._target_offset_for(top)).y - (bottom + blob._target_offset_for(bottom)).y
+	check(middle_thickness < blob._model_size.y * 0.75 and blob._target_offset_for(end).y > blob._target_offset_for(top).y, "Grip pinches middle thickness and bulges both ends")
+	main._update_camera_position()
+	check(is_equal_approx(main._camera.global_basis.z.dot(Vector3.UP), sin(deg_to_rad(75.0))), "Grip camera transitions to an overhead view of the lifted model")
+	var held_rotation: Vector3 = main._model_root.rotation
+	var blocked := InputEventMouseButton.new()
+	blocked.button_index = MOUSE_BUTTON_LEFT
+	blocked.pressed = true
+	blocked.position = Vector2(500, 200)
+	main._unhandled_input(blocked)
+	main._rotate_model(Vector2(100, 0))
+	blocked.position = screen_point()
+	blocked.shift_pressed = true
+	main._unhandled_input(blocked)
+	main._begin_pointer(screen_point(), false, MOUSE_BUTTON_LEFT)
+	check(main._model_root.rotation.is_equal_approx(held_rotation) and not main._dragging and not main._is_rotating and blob._interaction_mode == -1, "Grip blocks rotation, ordinary press, and Shift stretching")
+	var axis: Vector3 = blob._grip_axis
+	var along: Vector3 = axis.cross(Vector3.UP)
+	var left_point: Vector3 = blob._model_center - axis * blob._grip_width * 0.75
+	var right_point: Vector3 = blob._model_center + axis * blob._grip_width * 0.75
+	check(blob._grip_offset(left_point).dot(axis) > -blob._grip_offset(right_point).dot(axis) * 1.15, "Right-hand grip compresses the screen-left side more strongly")
+	var four_prints := true
+	for i in range(4):
+		var z := -0.72 + float(i) * 0.48
+		four_prints = four_prints and blob._grip_finger_profile(z) > 0.99 and blob._grip_finger_profile(z + 0.24) < 0.3
+	check(four_prints, "Four rounded finger pads have separated smooth profiles")
+	var top_prints := true
+	for i in range(4):
+		var pad_z: float = (-0.72 + float(i) * 0.48) * blob._grip_hand_half_width()
+		var pad: Vector3 = blob._model_center + Vector3.UP * blob._model_size.y * 0.5 + along * pad_z
+		var left_pad: Vector3 = pad - axis * blob._grip_width * 0.55 - along * blob._grip_hand_half_width() * 0.28 * 0.55
+		var right_pad: Vector3 = pad + axis * blob._grip_width * 0.55 + along * blob._grip_hand_half_width() * 0.28 * 0.55
+		top_prints = top_prints and grip_unrolled_height(left_pad) < blob._model_size.y * 0.40
+	check(top_prints, "All four finger pads visibly indent the upper-left surface")
+	var end_left: Vector3 = blob._model_center + axis * blob._grip_width * 0.5 + along * blob._grip_extent * 0.9
+	var end_other: Vector3 = end_left - axis * blob._grip_width
+	check((blob._grip_offset(end_left) - blob._grip_offset(end_other)).dot(axis) > blob._grip_width * 0.05, "Extruded ends widen despite the diagonal palm shear")
+	var thumb_point: Vector3 = top + axis * blob._grip_width * 0.48 - along * blob._grip_hand_half_width() * 1.10
+	check(grip_unrolled_height(thumb_point) < blob._model_size.y * 0.30, "Upper-right thumb deeply indents the top beyond the four-finger hand span")
+	var upper: Vector3 = top + along * blob._grip_extent * 0.9
+	var lower: Vector3 = top - along * blob._grip_extent * 0.9
+	check((blob._grip_offset(upper) - blob._grip_offset(lower)).dot(axis) < -blob._grip_width * 0.25, "Opposing ends skew to different sides during grip")
+	var vertical_peak := 0.0
+	var shake_peak := 0.0
+	var shake_min := 0.0
+	var shake_max := 0.0
+	for i in range(90):
+		advance(1.0 / 60.0)
+		vertical_peak = maxf(vertical_peak, absf(blob._grip_shake_vertical))
+		shake_peak = maxf(shake_peak, absf(blob._grip_shake))
+		shake_min = minf(shake_min, blob._grip_shake)
+		shake_max = maxf(shake_max, blob._grip_shake)
+	check(shake_min < 0.0 and shake_max > 0.0 and shake_peak <= blob._model_radius * 0.022, "Full grip produces bounded left/right shake")
+	check(vertical_peak > 0.0 and vertical_peak <= blob._model_radius * 0.022 * 0.35, "Grip adds bounded smaller screen-vertical shake")
+	var second_pose: Vector4 = blob._grip_pose_parameters(0.5)
+	check(second_pose.x > second_pose.y * 2.0 and second_pose.w < second_pose.z * 0.5, "Medium grip compresses before major extrusion and torsion")
+	var pose_continuous := true
+	for knot in [0.25, 0.5, 0.75, 1.0]:
+		pose_continuous = pose_continuous and (blob._grip_pose_parameters(knot - 0.0001) - blob._grip_pose_parameters(knot + 0.0001)).length() < 0.002
+	check(pose_continuous, "All four grip stages blend continuously")
+	var saved_amount: float = blob.grip_amount
+	var saved_shake: float = blob._grip_shake
+	for stage_index in range(1, 5):
+		blob.grip_amount = stage_index * 0.25
+		blob._grip_shake = 0.0
+		blob._sync_gpu()
+		await screenshot("grip-stage-" + str(stage_index))
+	blob.grip_amount = saved_amount
+	blob._grip_shake = saved_shake
+	blob._sync_gpu()
+	await screenshot("grip-tight")
+	mouse_button(point, false)
+	await process_frame
+	check(not blob._grip_haptic_active, "Release immediately stops grip vibration")
+	var at_release := blob.grip_amount
+	advance(0.03)
+	check(blob.grip_amount > 0.7 and blob.grip_amount <= at_release, "Release begins recovery continuously")
+	var overshoot := false
+	var grip_floor_safe := true
+	for i in range(120):
+		advance(1.0 / 60.0)
+		overshoot = overshoot or blob.grip_amount < -0.01
+		grip_floor_safe = grip_floor_safe and blob._target_offset_for(bottom).y > -blob._model_radius * 0.001
+	check(grip_floor_safe, "Lifted grip lands without crossing the base during recoil")
+	check(overshoot and not blob.is_gripping() and absf(blob._grip_shake) + absf(blob._grip_shake_vertical) < blob._model_radius * 0.00001, "Grip release has a decaying rebound and settles")
+	var original_rotation: Vector3 = main._model_root.rotation
+	var hand_span: float = blob._grip_hand_half_width()
+	var mesh: Node3D = blob._external_mesh_instance
+	for degrees in [0.0, 45.0, 90.0, 135.0]:
+		main._model_root.rotation.y = deg_to_rad(degrees)
+		blob.set_grip_axis(main._camera.global_basis.x)
+		check(is_equal_approx(blob._grip_hand_half_width(), hand_span), "Hand span stays fixed after model rotation: " + str(degrees))
+		blob.grip_amount = 1.0
+		var local_point: Vector3 = blob._model_center + blob._grip_axis * blob._model_radius * 0.4
+		var world_offset: Vector3 = mesh.global_basis * blob._grip_offset(local_point)
+		check(world_offset.dot(main._camera.global_basis.x) < -0.01, "Grip stays screen-horizontal after model rotation: " + str(degrees))
+		blob.cancel_grip()
+	main._model_root.rotation = original_rotation
+	main._set_doodle_enabled(true)
+	check(not button.visible and not blob._grip_held, "Doodle mode hides and cancels grip")
+	main._set_doodle_enabled(false)
+	main._process(main.CAMERA_RETURN_DURATION)
+
+# Remove the known palm roll/shear to measure the actual contact dents.
+func grip_unrolled_height(p: Vector3) -> float:
+	var c: Vector3 = p - blob._model_center
+	var along: Vector3 = blob._grip_axis.cross(Vector3.UP)
+	var z: float = c.dot(along)
+	var pose: Vector4 = blob._grip_pose_parameters(blob.grip_amount)
+	var roll: float = 0.24 * clampf(z / blob._grip_hand_half_width(), -1.0, 1.0) * pose.w
+	var d: Vector3 = c + blob._grip_offset(p)
+	var x: float = d.dot(blob._grip_axis) - blob._grip_shake + blob._grip_width * 0.20 * z / blob._grip_extent * pose.w
+	var y: float = d.y - blob._model_radius * 1.8 * smoothstep(0.0, 1.0, blob.grip_stage)
+	return -sin(roll) * x + cos(roll) * y

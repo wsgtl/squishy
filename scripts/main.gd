@@ -21,6 +21,8 @@ const CAMERA_RETURN_DURATION := 0.55
 var _camera_returning := false
 var _camera_return_elapsed := 0.0
 
+var _grip_button: Button
+
 var _camera: Camera3D
 var _blob: BlobDeformer
 var _model_root: Node3D
@@ -79,6 +81,11 @@ func _load_font() -> void:
 # Capture an already-owned gesture before GUI dispatch so releasing over the
 # parameter panel cannot leave the model stuck. New gestures still respect UI.
 func _input(event: InputEvent) -> void:
+	if _blob.is_gripping():
+		# Leave GUI events available, but discard any old model gesture ownership.
+		if _dragging or _is_rotating or _active_touch_id >= 0:
+			_finish_gesture()
+		return
 	# Native GUI sliders and ColorPicker need touch-generated mouse events.
 	# The model uses real touch IDs, so never process that second event stream.
 	if (event is InputEventMouseButton or event is InputEventMouseMotion) and event.device == InputEvent.DEVICE_ID_EMULATION:
@@ -130,6 +137,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _blob.is_gripping():
+		return
 	# Native GUI sliders and ColorPicker need touch-generated mouse events.
 	# The model uses real touch IDs, so never process that second event stream.
 	if (event is InputEventMouseButton or event is InputEventMouseMotion) and event.device == InputEvent.DEVICE_ID_EMULATION:
@@ -211,6 +220,7 @@ func _touch_separation() -> Vector3:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_finish_gesture()
+		_blob.set_grip_held(false)
 
 func _physics_process(delta: float) -> void:
 	_camera_current_dist = lerpf(_camera_current_dist, _camera_target_dist, minf(delta * 4.0, 1.0))
@@ -263,13 +273,24 @@ func _update_camera_position() -> void:
 	else:
 		_camera.look_at(_look_at_target, Vector3.UP)
 
+	if _blob != null and _blob.grip_stage > 0.0 and not _doodle_enabled:
+		var stage := smoothstep(0.0, 1.0, _blob.grip_stage)
+		var mesh_node: Node3D = _blob._external_mesh_instance
+		var lift := _blob._model_radius * 1.8 * mesh_node.global_basis.y.length() * stage
+		var target := _look_at_target + Vector3.UP * lift
+		var offset := _camera.position - _look_at_target
+		var angle := lerpf(atan2(offset.y, Vector2(offset.x, offset.z).length()), deg_to_rad(75.0), stage)
+		var horizontal := Vector3(cos(_camera_azimuth), 0.0, sin(_camera_azimuth))
+		_camera.position = target + (horizontal * cos(angle) + Vector3.UP * sin(angle)) * offset.length()
+		_camera.look_at(target, Vector3.UP * cos(angle) - horizontal * sin(angle))
+
 func _rotate_model(delta: Vector2) -> void:
-	if _model_root == null:
+	if _model_root == null or _blob.is_gripping():
 		return
 	_model_root.rotate_y(delta.x * 0.008)
 
 func _begin_pointer(screen_position: Vector2, stretch: bool, button: int) -> void:
-	if _doodle_enabled:
+	if _doodle_enabled or _blob.is_gripping():
 		return
 	var hit := _raycast_blob(screen_position)
 	if hit.is_empty():
@@ -738,6 +759,25 @@ func _build_hud() -> void:
 	vibration_slider.value_changed.connect(_on_vibration_changed)
 	vibration_row.add_child(vibration_slider)
 
+	_grip_button = Button.new()
+	_grip_button.name = "GripButton"
+	_grip_button.text = "按住挤压"
+	root.add_child(_grip_button)
+	_grip_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_grip_button.offset_left = -120
+	_grip_button.offset_right = 120
+	_grip_button.offset_top = -150
+	_grip_button.offset_bottom = -62
+	_grip_button.add_theme_font_override("font", _cjk_font)
+	_grip_button.add_theme_font_size_override("font_size", 28)
+	_grip_button.focus_mode = Control.FOCUS_NONE
+	_grip_button.button_down.connect(func():
+		if not _doodle_enabled:
+			_finish_gesture()
+			_blob.set_grip_axis(_camera.global_basis.x)
+			_blob.set_grip_held(true)
+	)
+	_grip_button.button_up.connect(func(): _blob.set_grip_held(false))
 	_style_parameter_controls(content)
 
 	var footer := Label.new()
@@ -854,6 +894,9 @@ func _draw_to(point: Vector2) -> void:
 func _set_doodle_enabled(enabled: bool) -> void:
 	_finish_gesture()
 	_doodle_enabled = enabled
+	_grip_button.visible = not enabled
+	if enabled:
+		_blob.cancel_grip()
 	if enabled:
 		_blob.reset_deformation()
 		_close_param_panel()

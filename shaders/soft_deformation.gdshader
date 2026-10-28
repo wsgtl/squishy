@@ -20,6 +20,15 @@ uniform vec3 anchor_point;
 uniform vec3 anchor_normal = vec3(0.0, 1.0, 0.0);
 uniform bool raised_rim_press = true;
 uniform float press_amount = 0.0;
+uniform float grip_amount = 0.0;
+uniform vec4 grip_pose = vec4(0.0);
+uniform float grip_stage = 0.0;
+uniform float grip_shake = 0.0;
+uniform float grip_shake_vertical = 0.0;
+uniform vec3 grip_axis = vec3(1.0, 0.0, 0.0);
+uniform float grip_extent = 1.0;
+uniform float grip_width = 1.0;
+uniform float grip_hand_half_width = 0.27;
 uniform float squash_amount = 0.0;
 uniform float press_depth = 0.32;
 uniform float finger_width = 0.138;
@@ -81,6 +90,64 @@ vec3 grab_dent(vec3 p, vec3 point, vec3 normal) {
 	return -normal * depth * mask * grab_pressure;
 }
 
+float grip_finger_profile(float z) {
+	float profile = 0.0;
+	for (int i = 0; i < 4; i++) {
+		float center = -0.72 + float(i) * 0.48;
+		float t = (z - center) / 0.30;
+		float bump = max(1.0 - t * t, 0.0);
+		profile += bump * bump;
+	}
+	return profile;
+}
+
+vec3 grip_offset(vec3 p) {
+	vec4 pose = grip_pose;
+	vec3 centered = p - model_center;
+	vec3 along = cross(grip_axis, vec3(0.0, 1.0, 0.0));
+	vec3 c = vec3(dot(centered, grip_axis), centered.y, dot(centered, along));
+	float extent = grip_extent;
+	float width = grip_width;
+	float hand = max(grip_hand_half_width, 0.000001);
+	float nx = c.x / max(width, 0.000001);
+	float z = c.z / max(extent, 0.000001);
+	float nz = clamp(abs(z), 0.0, 1.0);
+	float y = c.y / max(model_size.y * 0.5, 0.000001);
+	// Oblique contact frame: four fingers rise toward the inside of the palm.
+	float hand_z = c.z / hand - (0.10 + 0.18 * pose.w) * nx;
+	float waist = 1.0 - smoothstep(0.50, 1.50, abs(hand_z));
+	float ends = 1.0 - waist;
+	float pressure = pose.z;
+	float left = 1.0 - smoothstep(-0.35, 0.35, nx);
+	float finger_side = 1.0 - smoothstep(-0.70, 0.10, nx);
+	float fingers = grip_finger_profile(hand_z) * finger_side * smoothstep(-0.9, -0.2, y) * pressure;
+	// Broad, rounded thumb pad, diagonally crossing the upper-right surface.
+	float dx = (c.x - width * (0.54 - 0.06 * pose.w)) / hand;
+	float dz = c.z / hand + (1.20 - 0.10 * pose.w);
+	float thumb_angle = mix(0.26, 0.61, max(pose.w, 0.0));
+	float u = (cos(thumb_angle) * dx + sin(thumb_angle) * dz) / 1.02;
+	float v = (-sin(thumb_angle) * dx + cos(thumb_angle) * dz) / 0.48;
+	float thumb_bump = max(1.0 - u * u - v * v, 0.0);
+	float thumb = thumb_bump * thumb_bump * smoothstep(-0.5, 0.55, y) * pressure;
+	float round_end = ends * (1.0 - 0.30 * nz * nz);
+	float cap_x = clamp(nx, -1.0, 1.0);
+	float cap = 1.0 - cap_x * cap_x;
+	float fold = sin(hand_z * 3.14159265359 * 3.0 + y * 1.4) * 0.008 * waist * pressure;
+	vec3 offset = vec3(c.x * (-(0.406 + 0.112 * left) * waist * pose.x + 0.24 * round_end * pose.y) + c.x * fold + width * (0.12 * fingers - 0.16 * thumb),
+		c.y * (-0.336 * waist * pose.x + 0.60 * round_end * (0.65 + 0.35 * cap) * pose.y) + c.y * fold - model_size.y * (0.16 * fingers * smoothstep(-0.1, 0.65, y) + 0.46 * thumb),
+		c.z * smoothstep(1.0, 1.5, abs(hand_z)) * (0.12 + 0.12 * (1.0 - nz * nz) + 0.12 * cap) * pose.y - hand * 0.07 * thumb);
+	// Opposing end roll and palm shear produce a twisted grip, not a rigid rotation.
+	vec3 deformed = c + offset;
+	float roll = 0.24 * clamp(c.z / hand, -1.0, 1.0) * pose.w;
+	float rolled_x = cos(roll) * deformed.x - sin(roll) * deformed.y;
+	float rolled_y = sin(roll) * deformed.x + cos(roll) * deformed.y;
+	offset.x = rolled_x - c.x - width * 0.20 * z * pose.w;
+	offset.y = rolled_y - c.y;
+	offset.z += hand * 0.08 * nx * waist * pose.w;
+	offset.y += model_radius * 1.8 * smoothstep(0.0, 1.0, grip_stage);
+	return grip_axis * (offset.x + grip_shake) + vec3(0.0, 1.0, 0.0) * offset.y + along * (offset.z + grip_shake_vertical);
+}
+
 vec3 deform(vec3 p, out vec3 contact_offset) {
 	vec3 relative = p - anchor_point;
 	vec3 offset = vec3(0.0);
@@ -115,7 +182,7 @@ vec3 deform(vec3 p, out vec3 contact_offset) {
 		vec3 grab_b = grab_dent(p, grab_point_b, grab_normal_b);
 		offset += dot(grab_a, grab_a) >= dot(grab_b, grab_b) ? grab_a : grab_b;
 	}
-	contact_offset = offset;
+	contact_offset = offset * (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0));
 	float bottom = model_center.y - model_size.y * 0.5;
 	float squash = clamp(squash_amount * squash_strength, -0.04, 0.18);
 	float spread = inversesqrt(1.0 - squash) - 1.0;
@@ -154,7 +221,7 @@ vec3 deform(vec3 p, out vec3 contact_offset) {
 		float compressible = max(height * 0.85, model_radius * 0.000001);
 		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible));
 	}
-	return p + offset;
+	return p + offset * (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) + grip_offset(p);
 }
 
 void vertex() {

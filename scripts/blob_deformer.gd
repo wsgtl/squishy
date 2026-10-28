@@ -88,6 +88,26 @@ var _last_trail_point := Vector3.ZERO
 var _uvs := PackedVector2Array()
 var _indices := PackedInt32Array()
 
+# Fixed hand span, calibrated against the rest model, never projected length.
+const GRIP_HAND_SPAN_RATIO := 0.54
+
+var grip_amount := 0.0
+var grip_stage := 0.0
+var _grip_axis := Vector3.RIGHT
+var _grip_extent := 0.0
+var _grip_width := 0.0
+var _grip_velocity := 0.0
+var _grip_held := false
+var _grip_shake := 0.0
+var _grip_shake_vertical := 0.0
+var _grip_shake_vertical_ratio := 0.25
+var _grip_shake_vertical_phase := 0.0
+var _grip_shake_time := 0.0
+var _grip_shake_duration := 0.0
+var _grip_shake_amplitude := 0.0
+var _grip_haptic_active := false
+var _grip_rng := RandomNumberGenerator.new()
+
 var _interaction_mode: int = -1
 var _anchor_normal := Vector3.UP
 var _anchor_point := Vector3.ZERO
@@ -392,8 +412,8 @@ func reset_deformation() -> void:
 	_smooth_pull = Vector3.ZERO
 	_pull_velocity = Vector3.ZERO
 	_cpu_positions = _rest_positions.duplicate()
-	_cpu_dirty = false
-	_pick_dirty = false
+	_cpu_dirty = is_gripping()
+	_pick_dirty = is_gripping()
 	_deformed_picker = null
 	_sync_gpu()
 
@@ -402,7 +422,178 @@ func _to_mesh_local(world_point: Vector3) -> Vector3:
 		return _external_mesh_instance.to_local(world_point)
 	return to_local(world_point)
 
+func set_grip_axis(world_right: Vector3) -> void:
+	if is_gripping():
+		return
+	var mesh_node: Node3D = _external_mesh_instance if _external_mesh_instance != null else self
+	_grip_axis = mesh_node.global_basis.inverse() * world_right
+	_grip_axis.y = 0.0
+	_grip_axis = _grip_axis.normalized()
+	var along := _grip_axis.cross(Vector3.UP)
+	_grip_extent = 0.0
+	_grip_width = 0.0
+	for p in _rest_positions:
+		_grip_extent = maxf(_grip_extent, absf((p - _model_center).dot(along)))
+		_grip_width = maxf(_grip_width, absf((p - _model_center).dot(_grip_axis)))
+
+func set_grip_held(held: bool) -> void:
+	_grip_held = held
+	if not held:
+		_stop_grip_haptic()
+
+func cancel_grip() -> void:
+	_stop_grip_haptic()
+	_grip_shake = 0.0
+	_grip_shake_vertical = 0.0
+	_grip_shake_time = 0.0
+	_grip_shake_duration = 0.0
+	_grip_held = false
+	grip_amount = 0.0
+	grip_stage = 0.0
+	_grip_velocity = 0.0
+	_cpu_dirty = true
+	_pick_dirty = true
+	_sync_gpu()
+
+func is_gripping() -> bool:
+	return _grip_held or grip_stage > 0.0001 or absf(grip_amount) + absf(_grip_velocity) > 0.0001
+
+func _step_grip(delta: float) -> void:
+	if not is_gripping():
+		return
+	grip_stage = move_toward(grip_stage, 1.0 if _grip_held else 0.0, minf(delta, 0.1) / (0.65 if _grip_held else 1.0))
+	var steps := maxi(1, ceili(minf(delta, 0.1) * 120.0))
+	var dt := minf(delta, 0.1) / steps
+	var omega := 8.0 if _grip_held else 16.0
+	var damping := 1.0 if _grip_held else 0.4
+	for i in range(steps):
+		_grip_velocity += (omega * omega * ((1.0 if _grip_held else 0.0) - grip_amount) - 2.0 * damping * omega * _grip_velocity) * dt
+		grip_amount += _grip_velocity * dt
+	if not _grip_held and absf(grip_amount) + absf(_grip_velocity) < 0.0001:
+		grip_amount = 0.0
+		_grip_velocity = 0.0
+	_step_grip_shake(minf(delta, 0.1))
+	_cpu_dirty = true
+	_pick_dirty = true
+	_sync_gpu()
+
+# One random, smooth left/right pulse per cycle; only a scalar is sent to the GPU.
+func _step_grip_shake(delta: float) -> void:
+	if not _grip_held or grip_amount < 0.94:
+		_grip_shake *= exp(-30.0 * delta)
+		_grip_shake_vertical *= exp(-30.0 * delta)
+		if absf(_grip_shake_vertical) < _model_radius * 0.000001:
+			_grip_shake_vertical = 0.0
+		if absf(_grip_shake) < _model_radius * 0.000001:
+			_grip_shake = 0.0
+		_grip_shake_duration = 0.0
+		_stop_grip_haptic()
+		return
+	if _grip_shake_duration <= 0.0 or _grip_shake_time >= _grip_shake_duration:
+		_grip_shake_time = 0.0
+		_grip_shake_duration = _grip_rng.randf_range(0.10, 0.18)
+		_grip_shake_amplitude = _grip_rng.randf_range(0.008, 0.022) * _model_radius
+		_grip_shake_vertical_ratio = _grip_rng.randf_range(0.20, 0.35)
+		_grip_shake_vertical_phase = _grip_rng.randf_range(-PI, PI)
+		if _grip_rng.randf() < 0.5:
+			_grip_shake_amplitude *= -1.0
+		var strength := absf(_grip_shake_amplitude) / (_model_radius * 0.022) * smoothstep(0.94, 1.0, grip_amount)
+		_grip_haptic(strength, _grip_shake_duration)
+	_grip_shake_time = minf(_grip_shake_time + delta, _grip_shake_duration)
+	var phase := _grip_shake_time / _grip_shake_duration
+	var envelope := pow(sin(PI * phase), 2.0) * smoothstep(0.94, 1.0, grip_amount)
+	_grip_shake = _grip_shake_amplitude * sin(TAU * phase) * envelope
+	_grip_shake_vertical = _grip_shake_amplitude * _grip_shake_vertical_ratio * sin(TAU * phase + _grip_shake_vertical_phase) * envelope
+
+func _grip_haptic(strength: float, duration: float) -> void:
+	_grip_haptic_active = true
+	var milliseconds := maxi(1, roundi(duration * 1000.0))
+	if OS.has_feature("web"):
+		# Browsers expose duration only; pulse duty follows visual shake strength.
+		var on := maxi(1, roundi(milliseconds * 0.5 * strength))
+		var gap := maxi(1, milliseconds - on * 2)
+		JavaScriptBridge.eval("try { if (navigator.vibrate) navigator.vibrate([%d,%d,%d]); } catch (e) {}" % [on, gap, on])
+	elif OS.get_name() == "Android" or OS.get_name() == "iOS":
+		Input.vibrate_handheld(milliseconds, strength)
+
+func _stop_grip_haptic() -> void:
+	if not _grip_haptic_active:
+		return
+	_grip_haptic_active = false
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) {}")
+	elif OS.get_name() == "Android" or OS.get_name() == "iOS":
+		Input.vibrate_handheld(0)
+
+func _grip_hand_half_width() -> float:
+	return minf(_model_size.x, _model_size.z) * GRIP_HAND_SPAN_RATIO * 0.5
+
+func _grip_finger_profile(z: float) -> float:
+	var profile := 0.0
+	for i in range(4):
+		var center := -0.72 + float(i) * 0.48
+		var t := (z - center) / 0.30
+		var bump := maxf(1.0 - t * t, 0.0)
+		profile += bump * bump
+	return profile
+
+# Four photographed grip stages: squeeze, extrusion, contact, torsion.
+# Each channel has its own progression instead of scaling one final shape.
+func _grip_pose_parameters(amount: float) -> Vector4:
+	if amount <= 0.0:
+		return Vector4(amount, amount, 0.0, amount * 0.35)
+	var keys := [Vector4.ZERO, Vector4(0.32, 0.10, 0.18, 0.02), Vector4(0.57, 0.25, 0.36, 0.12), Vector4(0.84, 0.63, 0.78, 0.60), Vector4.ONE]
+	var phase := clampf(amount, 0.0, 1.0) * 4.0
+	var index := mini(int(phase), 3)
+	return keys[index].lerp(keys[index + 1], smoothstep(0.0, 1.0, phase - index))
+
+func _grip_offset(p: Vector3) -> Vector3:
+	var pose := _grip_pose_parameters(grip_amount)
+	var centered := p - _model_center
+	var along := _grip_axis.cross(Vector3.UP)
+	var c := Vector3(centered.dot(_grip_axis), centered.y, centered.dot(along))
+	var extent := _grip_extent if _grip_extent > 0.0 else _model_size.z * 0.5
+	var width := _grip_width if _grip_width > 0.0 else _model_size.x * 0.5
+	var hand := maxf(_grip_hand_half_width(), 0.000001)
+	var nx := c.x / maxf(width, 0.000001)
+	var z := c.z / maxf(extent, 0.000001)
+	var nz := clampf(absf(z), 0.0, 1.0)
+	var y := c.y / maxf(_model_size.y * 0.5, 0.000001)
+	# Oblique contact frame: four fingers rise toward the inside of the palm.
+	var hand_z := c.z / hand - (0.10 + 0.18 * pose.w) * nx
+	var waist := 1.0 - smoothstep(0.50, 1.50, absf(hand_z))
+	var ends := 1.0 - waist
+	var pressure := pose.z
+	var left := 1.0 - smoothstep(-0.35, 0.35, nx)
+	var finger_side := 1.0 - smoothstep(-0.70, 0.10, nx)
+	var fingers := _grip_finger_profile(hand_z) * finger_side * smoothstep(-0.9, -0.2, y) * pressure
+	# Broad, rounded thumb pad, diagonally crossing the upper-right surface.
+	var dx := (c.x - width * (0.54 - 0.06 * pose.w)) / hand
+	var dz := c.z / hand + (1.20 - 0.10 * pose.w)
+	var thumb_angle := lerpf(0.26, 0.61, maxf(pose.w, 0.0))
+	var u := (cos(thumb_angle) * dx + sin(thumb_angle) * dz) / 1.02
+	var v := (-sin(thumb_angle) * dx + cos(thumb_angle) * dz) / 0.48
+	var thumb_bump := maxf(1.0 - u * u - v * v, 0.0)
+	var thumb := thumb_bump * thumb_bump * smoothstep(-0.5, 0.55, y) * pressure
+	var round_end := ends * (1.0 - 0.30 * nz * nz)
+	var cap := 1.0 - pow(clampf(nx, -1.0, 1.0), 2.0)
+	var fold := sin(hand_z * PI * 3.0 + y * 1.4) * 0.008 * waist * pressure
+	var offset := Vector3(c.x * (-(0.406 + 0.112 * left) * waist * pose.x + 0.24 * round_end * pose.y) + c.x * fold + width * (0.12 * fingers - 0.16 * thumb),
+		c.y * (-0.336 * waist * pose.x + 0.60 * round_end * (0.65 + 0.35 * cap) * pose.y) + c.y * fold - _model_size.y * (0.16 * fingers * smoothstep(-0.1, 0.65, y) + 0.46 * thumb),
+		c.z * smoothstep(1.0, 1.5, absf(hand_z)) * (0.12 + 0.12 * (1.0 - nz * nz) + 0.12 * cap) * pose.y - hand * 0.07 * thumb)
+	# Opposing end roll and palm shear produce a twisted grip, not a rigid rotation.
+	var deformed := c + offset
+	var roll := 0.24 * clampf(c.z / hand, -1.0, 1.0) * pose.w
+	var rolled_x := cos(roll) * deformed.x - sin(roll) * deformed.y
+	var rolled_y := sin(roll) * deformed.x + cos(roll) * deformed.y
+	offset.x = rolled_x - c.x - width * 0.20 * z * pose.w
+	offset.y = rolled_y - c.y
+	offset.z += hand * 0.08 * nx * waist * pose.w
+	offset.y += _model_radius * 1.8 * smoothstep(0.0, 1.0, grip_stage)
+	return _grip_axis * (offset.x + _grip_shake) + Vector3.UP * offset.y + along * (offset.z + _grip_shake_vertical)
+
 func _physics_process(delta: float) -> void:
+	_step_grip(delta)
 	if _rest_positions.is_empty() or (_interaction_mode < 0 and not _is_recovering):
 		return
 	# Spring the deformation field instead of independent seam vertices. Identical
@@ -650,7 +841,7 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 		var height := maxf(rest_position.y - bottom, 0.0)
 		var compressible := maxf(height * 0.85, _model_radius * 0.000001)
 		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible))
-	return offset
+	return offset * (1.0 - clampf(grip_amount * 1.5, 0.0, 1.0)) + _grip_offset(rest_position)
 
 func _build_nodes() -> void:
 	_mesh_instance = MeshInstance3D.new()
@@ -777,6 +968,15 @@ func _setup_gpu() -> void:
 func _sync_gpu() -> void:
 	if _shader_material == null:
 		return
+	_shader_material.set_shader_parameter("grip_amount", grip_amount)
+	_shader_material.set_shader_parameter("grip_pose", _grip_pose_parameters(grip_amount))
+	_shader_material.set_shader_parameter("grip_stage", grip_stage)
+	_shader_material.set_shader_parameter("grip_shake", _grip_shake)
+	_shader_material.set_shader_parameter("grip_shake_vertical", _grip_shake_vertical)
+	_shader_material.set_shader_parameter("grip_axis", _grip_axis)
+	_shader_material.set_shader_parameter("grip_hand_half_width", _grip_hand_half_width())
+	_shader_material.set_shader_parameter("grip_width", _grip_width if _grip_width > 0.0 else _model_size.x * 0.5)
+	_shader_material.set_shader_parameter("grip_extent", _grip_extent if _grip_extent > 0.0 else _model_size.z * 0.5)
 	_shader_material.set_shader_parameter("grab_point_a", _grab_point_a)
 	_shader_material.set_shader_parameter("grab_point_b", _grab_point_b)
 	_shader_material.set_shader_parameter("grab_normal_a", _grab_normal_a)
