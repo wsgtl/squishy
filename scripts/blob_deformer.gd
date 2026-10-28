@@ -270,7 +270,11 @@ func pick_ray(world_origin: Vector3, world_direction: Vector3, stable_surface: b
 	var weights := Geometry3D.get_triangle_barycentric_coords(local_point, points[ia], points[ib], points[ic])
 	var rest_point := _rest_positions[ia] * weights.x + _rest_positions[ib] * weights.y + _rest_positions[ic] * weights.z
 	var normal := (_rest_normals[ia] * weights.x + _rest_normals[ib] * weights.y + _rest_normals[ic] * weights.z).normalized()
-	return {"position": mesh_node.to_global(local_point), "rest_point": rest_point, "local_normal": normal}
+	return {"position": mesh_node.to_global(local_point), "rest_point": rest_point, "local_normal": normal, "uv": _uvs[ia] * weights.x + _uvs[ib] * weights.y + _uvs[ic] * weights.z}
+
+func set_doodle_texture(texture: Texture2D) -> void:
+	_shader_material.set_shader_parameter("doodle_texture", texture)
+	_shader_material.set_shader_parameter("has_doodle_texture", texture != null)
 
 func begin_interaction(world_point: Vector3, stretch: bool, rest_point: Vector3 = Vector3.INF, local_normal: Vector3 = Vector3.UP) -> void:
 	_press_elapsed = 0.0

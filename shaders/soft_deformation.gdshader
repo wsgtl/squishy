@@ -4,6 +4,8 @@ render_mode diffuse_burley, specular_schlick_ggx;
 uniform vec4 base_color : source_color = vec4(1.0);
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable;
 uniform bool has_albedo_texture = false;
+uniform sampler2D doodle_texture : source_color, filter_linear, repeat_disable;
+uniform bool has_doodle_texture = false;
 uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform bool has_normal_texture = false;
 uniform float normal_strength = 1.0;
@@ -199,6 +201,10 @@ void fragment() {
 	vec4 color = base_color;
 	if (has_albedo_texture) {
 		color *= texture(albedo_texture, UV);
+	}
+	if (has_doodle_texture) {
+		vec4 ink = texture(doodle_texture, UV);
+		color.rgb = mix(color.rgb, ink.rgb, ink.a);
 	}
 	float cavity = clamp(dent_shadow, 0.0, 1.0) * dent_shadow_strength;
 	ALBEDO = color.rgb * (1.0 - cavity);

@@ -587,5 +587,161 @@ func _run() -> void:
 		blob.end_interaction()
 		advance(recovery * 8.0)
 		check(max_offset() < 0.001, "Recovery stable at extreme parameters: " + str(recovery))
+	await check_modals()
+	await check_doodle()
 	print("DEFORMATION TESTS: ", "PASS" if failures == 0 else "FAIL", " (", failures, " failures)")
 	quit(0 if failures == 0 else 1)
+
+func check_doodle() -> void:
+	main._set_doodle_enabled(true)
+	var center := screen_point()
+	var hit: Dictionary = main._raycast_blob(center, true)
+	check(hit.has("uv"), "Surface picking exposes interpolated UV for painting")
+	mouse_button(center, true)
+	await process_frame
+	check(main._drawing and not main._dragging, "Doodle mouse down paints without pressing")
+	motion(center + Vector2(65, 0))
+	await process_frame
+	mouse_button(center + Vector2(65, 0), false)
+	await process_frame
+	var uv: Vector2 = hit.uv
+	var pixel := Vector2i(uv * float(main._doodle.SIZE - 1))
+	check(main._doodle.image.get_pixelv(pixel).a > 0.9, "Black ink reaches the picked surface UV")
+	check(not main._drawing and max_offset() < 0.00001, "Doodle release leaves the model undeformed")
+	var touch := InputEventScreenTouch.new()
+	touch.index = 7
+	touch.position = center + Vector2(-40, -30)
+	touch.pressed = true
+	feed_input(touch)
+	await process_frame
+	check(main._drawing and main._drawing_touch == 7, "Finger starts a doodle stroke")
+	var drag := InputEventScreenDrag.new()
+	drag.index = 7
+	drag.position = center + Vector2(-40, 30)
+	feed_input(drag)
+	await process_frame
+	touch.position = drag.position
+	touch.pressed = false
+	feed_input(touch)
+	await process_frame
+	check(not main._drawing and not main._stretching, "Finger drawing releases without triggering stretch")
+	await screenshot("doodle")
+	main._set_doodle_enabled(false)
+	mouse_button(center, true, MOUSE_BUTTON_LEFT, true)
+	await process_frame
+	motion(center + Vector2(160, 0), true)
+	await process_frame
+	advance(0.3)
+	check(main._stretching and max_offset() > 0.01, "Exiting doodle restores stretch interaction")
+	check(main._doodle.image.get_pixelv(pixel).a > 0.9, "Ink persists during deformation")
+	await screenshot("doodle-stretch")
+	mouse_button(center + Vector2(160, 0), false)
+	await process_frame
+	main._doodle.clear()
+	main._doodle.flush()
+	check(main._doodle.image.get_pixelv(pixel).a == 0.0, "Clear removes ink without changing model material")
+	var slider := main.find_child("DoodleSizeSlider", true, false) as VSlider
+	var picker := main.find_child("DoodleColorPicker", true, false) as ColorPickerButton
+	slider.value = 32
+	picker.color = Color.RED
+	picker.color_changed.emit(Color.RED)
+	main._doodle.stamp(Vector2(0.5, 0.5))
+	check(main._doodle.radius == 16.0 and main._doodle.image.get_pixel(525, 511).a > 0.9, "Brush size slider changes painted footprint")
+	check(main._doodle.image.get_pixel(511, 511).r > 0.99, "Color picker changes painted ink")
+	var simple_picker := picker.get_picker()
+	check(simple_picker.edit_alpha and not simple_picker.sampler_visible and not simple_picker.color_modes_visible and not simple_picker.hex_visible and not simple_picker.presets_visible, "Mobile picker shows square and RGBA without advanced controls")
+	picker.color_changed.emit(Color.BLUE)
+	main._doodle.stamp(Vector2(0.5, 0.5))
+	check(main._doodle.image.get_pixel(511, 511).b > 0.99 and main._doodle.image.get_pixel(511, 511).r < 0.01, "New brush color paints over existing opaque ink")
+	var eraser := main.find_child("DoodleEraserSwitch", true, false) as CheckButton
+	eraser.button_pressed = true
+	check(slider.value == 30 and main._doodle.radius == 15.0, "Eraser defaults to size 30 independently of brush")
+	slider.value = 10
+	main._doodle.stamp(Vector2(0.5, 0.5))
+	check(main._doodle.image.get_pixel(511, 511).a == 0.0, "Eraser removes ink coverage to reveal the original material")
+	check(main._doodle.image.get_pixel(525, 511).a > 0.9, "Eraser preserves ink outside its selected radius")
+	eraser.button_pressed = false
+	check(slider.value == 32 and main._doodle.radius == 16.0, "Returning to brush restores its previous size")
+	eraser.button_pressed = true
+	check(slider.value == 10 and main._doodle.radius == 5.0, "Returning to eraser restores its adjusted size")
+	eraser.button_pressed = false
+	main._doodle.stamp(Vector2(0.5, 0.5))
+	check(main._doodle.image.get_pixel(511, 511).b > 0.99 and main._doodle.image.get_pixel(511, 511).a > 0.99, "Switching back to brush restores the selected color")
+	main._doodle.clear()
+	picker.color_changed.emit(Color(1, 0, 0, 0.25))
+	main._doodle.stamp(Vector2(0.5, 0.5))
+	check(absf(main._doodle.image.get_pixel(511, 511).a - 0.25) < 0.01, "Brush uses the selected opacity")
+	main._doodle.clear()
+	slider.value = 10
+	picker.color_changed.emit(Color.BLACK)
+	blob.reset_deformation()
+
+func check_modals() -> void:
+	main._toggle_param_panel()
+	await process_frame
+	await process_frame
+	check(main._param_panel.size == Vector2(root.size), "Parameter modal covers the entire viewport")
+	await screenshot("parameter-modal")
+	mouse_button(Vector2(10, 110), true)
+	await process_frame
+	mouse_button(Vector2(10, 110), false)
+	await process_frame
+	check(not main._param_panel.visible and not main._dragging and not main._is_rotating, "Backdrop dismisses parameters without starting a model gesture")
+	main._set_doodle_enabled(true)
+	await process_frame
+	await process_frame
+	check(main._doodle_panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Doodle toolbars leave the model available for drawing")
+	await screenshot("doodle-toolbar")
+	var color_button := main.find_child("DoodleColorPicker", true, false) as ColorPickerButton
+	color_button.get_popup().popup_centered()
+	await process_frame
+	await screenshot("doodle-color-picker")
+	color_button.get_popup().hide()
+	var zoom := main.find_child("DoodleZoomSlider", true, false) as VSlider
+	var mode := main.find_child("DoodleViewModeButton", true, false) as Button
+	var initial_camera: float = main._camera.position.distance_to(main._look_at_target)
+	zoom.value = 2.0
+	check(absf(main._camera.position.distance_to(main._look_at_target) * 2 - initial_camera) < 0.0001, "Zoom slider doubles model display size by halving camera distance")
+	var zoom_hit: Dictionary = main._raycast_blob(screen_point(), true)
+	check(not zoom_hit.is_empty() and main._begin_drawing(screen_point(), -1), "Zoomed model remains paintable at the picked UV")
+	main._finish_gesture()
+	main._doodle.clear()
+	zoom.value = 1.0
+	check(main.find_child("DoodleRotationSlider", true, false) == null, "Bottom rotation slider is removed")
+	mode.button_pressed = true
+	check(zoom.min_value == 0 and zoom.max_value == 90, "View mode covers level to top-down")
+	zoom.value = 0
+	check(absf(main._camera.position.y - main._look_at_target.y) < 0.0001, "View slider reaches level view")
+	zoom.value = 90
+	check(main._camera.global_basis.is_finite() and (main._camera.position - main._look_at_target).normalized().dot(Vector3.UP) > 0.999, "Top-down camera stays valid at ninety degrees")
+	await screenshot("doodle-top-view")
+	mode.button_pressed = false
+	check(zoom.value == 1 and is_equal_approx(main._doodle_elevation, PI * 0.5), "Switching to zoom preserves angle and previous zoom")
+	mode.button_pressed = true
+	check(zoom.value == 90, "Switching back restores previous angle")
+	zoom.value = rad_to_deg(main._camera_polar)
+	mode.button_pressed = false
+	var eye := main.find_child("DoodleVisibilityButton", true, false) as Button
+	eye.button_pressed = true
+	check(is_equal_approx(main.find_child("LeftDoodleToolbar", true, false).modulate.a, 0.2) and eye.modulate.a == 1, "Eye button dims tools while keeping itself visible")
+	check(mode.mouse_filter == Control.MOUSE_FILTER_IGNORE and not zoom.editable and zoom.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Faded sliders ignore input and cannot be dragged")
+	check(not main._over_doodle_controls(zoom.get_global_rect().get_center()), "Faded tool areas allow painting through them")
+	await screenshot("doodle-toolbar-dimmed")
+	eye.button_pressed = false
+	check(mode.mouse_filter != Control.MOUSE_FILTER_IGNORE and zoom.editable, "Eye button restores slider interaction")
+	var card := main.find_child("LeftDoodleToolbar", true, false) as Control
+	mouse_button(card.get_global_rect().position + Vector2(5, 5), true)
+	await process_frame
+	check(not main._drawing and not main._dragging and not main._is_rotating, "Toolbar background blocks model gestures")
+	mouse_button(card.get_global_rect().position + Vector2(5, 5), false)
+	await process_frame
+	zoom.value = 1.8
+	mode.button_pressed = true
+	zoom.value = 10
+	var exit_position: Vector3 = main._camera.position
+	main._set_doodle_enabled(false)
+	check(main._camera.position.distance_to(exit_position) < 0.0001 and main._camera_returning, "Exiting doodle starts camera return without jumping")
+	main._process(main.CAMERA_RETURN_DURATION * 0.5)
+	check(main._camera_returning and main._camera.position.distance_to(exit_position) > 0.01, "Camera angle and distance interpolate during return")
+	main._process(main.CAMERA_RETURN_DURATION)
+	check(zoom.value == 1 and main._doodle_zoom == 1 and absf(main._camera.position.distance_to(main._look_at_target) - initial_camera) < 0.0001, "Exiting doodle restores the normal camera size and zoom control")
