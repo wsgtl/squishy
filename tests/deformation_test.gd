@@ -592,6 +592,7 @@ func _run() -> void:
 	await check_modals()
 	await check_touch_ui()
 	await check_doodle()
+	await check_scene_capture()
 	print("DEFORMATION TESTS: ", "PASS" if failures == 0 else "FAIL", " (", failures, " failures)")
 	quit(0 if failures == 0 else 1)
 
@@ -1112,3 +1113,33 @@ func check_reset_then_stretch() -> void:
 		check(finite and blob._press_amount == 0.0, "Direct stretch works without prior press; after doodle: " + str(after_doodle))
 		await screenshot("reset-stretch-" + str(after_doodle))
 		blob.reset_deformation()
+
+func check_scene_capture() -> void:
+	var photo = main._scene_capture
+	check(main.find_child("SceneCaptureButton", true, false) != null, "Scene capture button is available")
+	check(photo.capture_size(Vector2i(1170, 2532)) == Vector2i(1170, 2532), "Photo preserves phone pixel dimensions")
+	var large: Vector2i = photo.capture_size(Vector2i(7680, 4320))
+	check(large == Vector2i(4096, 2304), "Photo bounds large resolutions without changing aspect ratio")
+	if not capture:
+		return # Actual viewport readback requires a graphics renderer.
+	await photo.capture_scene()
+	check(photo.is_open() and not photo.jpeg.is_empty(), "Scene capture produces JPEG and preview modal")
+	if photo.jpeg.is_empty():
+		photo.close()
+		return
+	var decoded := Image.new()
+	check(decoded.load_jpg_from_buffer(photo.jpeg) == OK and decoded.get_size() == photo.captured.get_size(), "JPEG decodes at the requested output size")
+	var corner := decoded.get_pixel(roundi(decoded.get_width() * 0.06), roundi(decoded.get_height() * 0.04))
+	check(corner.r > 0.7 and corner.g > 0.5, "Scene photo excludes top-left parameter button and modal UI")
+	photo.captured.save_png("/tmp/nienie-scene-only.png")
+	photo._save_to_path("/tmp/nienie-scene-capture-test.jpg")
+	check(FileAccess.get_file_as_bytes("/tmp/nienie-scene-capture-test.jpg") == photo.jpeg, "Desktop save writes the exact JPEG bytes")
+	var point := screen_point()
+	mouse_button(point, true)
+	await process_frame
+	check(not main._dragging and not main._drawing, "Preview modal blocks model interaction")
+	mouse_button(point, false)
+	await process_frame
+	await screenshot("scene-capture-modal")
+	photo.close()
+	check(not photo.is_open() and photo.jpeg.is_empty(), "Closing capture releases the image and restores scene input")

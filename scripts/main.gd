@@ -2,6 +2,8 @@ extends Node3D
 
 const MODEL_PATH := "res://glb/sfl.glb"
 const MODEL_WIDTH := 2.0
+const SceneCapture = preload("res://scripts/scene_capture.gd")
+var _scene_capture: CanvasLayer
 
 const BlobScript = preload("res://scripts/blob_deformer.gd")
 
@@ -95,6 +97,8 @@ func _load_font() -> void:
 # Capture an already-owned gesture before GUI dispatch so releasing over the
 # parameter panel cannot leave the model stuck. New gestures still respect UI.
 func _input(event: InputEvent) -> void:
+	if _scene_capture != null and _scene_capture.is_open():
+		return
 	if _blob.is_gripping():
 		# Leave GUI events available, but discard any old model gesture ownership.
 		if _dragging or _is_rotating or _active_touch_id >= 0:
@@ -153,6 +157,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _scene_capture != null and _scene_capture.is_open():
+		return
 	if _blob.is_gripping():
 		return
 	# Native GUI sliders and ColorPicker need touch-generated mouse events.
@@ -836,6 +842,9 @@ func _build_hud() -> void:
 	footer.add_theme_color_override("font_color", Color("#735d46"))
 	footer.add_theme_font_override("font", _cjk_font)
 	root.add_child(footer)
+	_scene_capture = SceneCapture.new()
+	add_child(_scene_capture)
+	_scene_capture.setup(self, root, _cjk_font)
 
 func _toggle_param_panel() -> void:
 	if _param_visible:
