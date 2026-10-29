@@ -616,7 +616,82 @@ func check_doodle_opacity() -> void:
 	canvas.clear()
 	check(canvas.image.get_pixelv(pixel).a == 0.0 and canvas._stroke_base.is_empty(), "Clear discards active stroke coverage")
 
+func check_stickers() -> void:
+	main._set_doodle_enabled(true)
+	main._doodle.clear()
+	var blank: PackedByteArray = main._doodle.image.get_data()
+	var button := main.find_child("DoodleStickerButton", true, false) as Button
+	var slider := main.find_child("DoodleSizeSlider", true, false) as VSlider
+	var eraser := main.find_child("DoodleEraserSwitch", true, false) as CheckButton
+	eraser.button_pressed = true
+	button.button_pressed = true
+	check(main._sticker_enabled and not main._doodle.erasing and slider.value == 220, "Sticker selection exits eraser and exposes independent size")
+	slider.value = 180
+	var center := screen_point()
+	mouse_button(center, true)
+	await process_frame
+	main._refresh_sticker_preview()
+	var before: PackedByteArray = main._doodle.image.get_data()
+	check(main._drawing and not main._dragging and before != blank, "Click on model places bundled PNG without deformation")
+	motion(center + Vector2(50, 0))
+	mouse_button(center + Vector2(50, 0), false)
+	await process_frame
+	main._refresh_sticker_preview()
+	check(main._sticker_pending and main._doodle.image.get_data() != before, "Dragging moves the pending sticker without baking trails")
+	var moved: PackedByteArray = main._doodle.image.get_data()
+	var rotation := main.find_child("StickerRotationSlider", true, false) as HSlider
+	rotation.value = 45
+	main._refresh_sticker_preview()
+	check(main._doodle.image.get_data() != moved, "Rotation slider transforms the pending sticker")
+	slider.value = 240
+	main._refresh_sticker_preview()
+	var edited: PackedByteArray = main._doodle.image.get_data()
+	main._confirm_sticker()
+	check(not main._sticker_pending and main._sticker_undo != null, "Confirm commits an editable sticker and records undo")
+	main._edit_last_sticker()
+	rotation.value = 90
+	main._refresh_sticker_preview()
+	main._cancel_sticker()
+	check(main._doodle.image.get_data() == edited, "Cancel re-edit restores the confirmed sticker exactly")
+	main._edit_last_sticker()
+	rotation.value = -30
+	main._refresh_sticker_preview()
+	main._confirm_sticker()
+	check(main._doodle.image.get_data() != edited, "Confirmed sticker can be re-edited without duplicating it")
+	main._undo_sticker()
+	check(main._doodle.image.get_data() == blank, "Undo restores the exact canvas before the sticker")
+	main._begin_drawing(center, -1)
+	main._refresh_sticker_preview()
+	main._finish_gesture()
+	main._cancel_sticker()
+	check(main._doodle.image.get_data() == blank, "Cancel pending placement leaves no ink")
+	slider.value = 180
+	main._begin_drawing(center, -1)
+	main._refresh_sticker_preview()
+	main._finish_gesture()
+	await screenshot("doodle-sticker")
+	button.button_pressed = false
+	check(slider.max_value == 48 and main._doodle.radius * 2.0 == slider.value, "Returning to brush restores its width range")
+	button.button_pressed = true
+	check(slider.value == 180, "Sticker width is remembered independently")
+	eraser.button_pressed = true
+	check(not main._sticker_enabled and main._doodle.erasing, "Eraser exits sticker mode")
+	eraser.button_pressed = false
+	main._doodle.clear()
+	main._set_doodle_enabled(false)
+	main._process(main.CAMERA_RETURN_DURATION)
+	var canvas = load("res://scripts/doodle_canvas.gd").new()
+	var source := Image.create(4, 2, false, Image.FORMAT_RGBA8)
+	source.fill(Color(1, 0, 0, 0.5))
+	canvas.place_sticker(Vector2(0.5, 0.5), source, 32)
+	check(absf(canvas.image.get_pixel(512, 512).a - 0.5) < 0.01, "Sticker keeps source opacity independently of brush color")
+	check(canvas.image.get_pixel(512, 525).a == 0.0, "Sticker preserves aspect ratio and untouched surroundings")
+	canvas.place_sticker(Vector2.ZERO, source, 32)
+	canvas.place_sticker(Vector2.ONE, source, 32)
+	check(canvas.dirty, "Sticker placements clip safely at texture edges")
+
 func check_doodle() -> void:
+	await check_stickers()
 	check_doodle_opacity()
 	main._set_doodle_enabled(true)
 	var center := screen_point()

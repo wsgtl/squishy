@@ -65,6 +65,37 @@ func stamp(uv: Vector2) -> void:
 					image.set_pixel(x, y, previous.blend(Color(color.r, color.g, color.b, alpha * color.a)))
 				dirty = true
 
+# Bake a sticker into the existing ink texture; no new mesh or draw call.
+func place_sticker(uv: Vector2, source: Image, width: int, angle: float = 0.0) -> void:
+	end_stroke()
+	if source == null or source.is_empty():
+		return
+	var sticker := source.duplicate() as Image
+	if sticker.is_compressed():
+		sticker.decompress()
+	sticker.convert(Image.FORMAT_RGBA8)
+	var target_width := clampi(width, 16, SIZE)
+	var target_height := maxi(1, roundi(target_width * float(sticker.get_height()) / sticker.get_width()))
+	sticker.resize(target_width, target_height, Image.INTERPOLATE_LANCZOS)
+	if not is_zero_approx(angle):
+		var rotated_size := Vector2(target_width, target_height).length()
+		var side := ceili(rotated_size)
+		var rotated := Image.create(side, side, false, Image.FORMAT_RGBA8)
+		rotated.fill(Color.TRANSPARENT)
+		var center := Vector2(side - 1, side - 1) * 0.5
+		var source_center := Vector2(target_width - 1, target_height - 1) * 0.5
+		var inverse := Transform2D(-angle, Vector2.ZERO)
+		for y in range(side):
+			for x in range(side):
+				var sample := inverse * (Vector2(x, y) - center) + source_center
+				var pixel := Vector2i(sample.round())
+				if pixel.x >= 0 and pixel.x < target_width and pixel.y >= 0 and pixel.y < target_height:
+					rotated.set_pixel(x, y, sticker.get_pixelv(pixel))
+		sticker = rotated
+	var origin := Vector2i((uv * float(SIZE - 1)).round()) - sticker.get_size() / 2
+	image.blend_rect(sticker, Rect2i(Vector2i.ZERO, sticker.get_size()), origin)
+	dirty = true
+
 func flush() -> void:
 	if dirty:
 		texture.update(image)

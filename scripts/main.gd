@@ -8,6 +8,19 @@ const BlobScript = preload("res://scripts/blob_deformer.gd")
 const DoodleCanvas = preload("res://scripts/doodle_canvas.gd")
 var _doodle := DoodleCanvas.new()
 var _doodle_enabled := false
+var _sticker_enabled := false
+var _sticker_width := 220
+var _sticker_image: Image
+var _sticker_cancel_image: Image
+var _sticker_base: Image
+var _sticker_undo: Image
+var _sticker_uv := Vector2.ZERO
+var _sticker_angle := 0.0
+var _sticker_pending := false
+var _sticker_preview_dirty := false
+var _sticker_edit_tools: VBoxContainer
+var _sticker_last: Dictionary = {}
+var _sticker_actions: Dictionary = {}
 var _drawing := false
 var _drawing_touch := -1
 var _drawing_last := Vector2.ZERO
@@ -887,6 +900,12 @@ func _on_vibration_changed(value: float) -> void:
 		_blob.rebound_vibration = value
 
 func _process(delta: float) -> void:
+	_refresh_sticker_preview()
+	if _sticker_enabled and not _sticker_actions.is_empty():
+		_sticker_actions["ConfirmStickerButton"].disabled = not _sticker_pending
+		_sticker_actions["CancelStickerButton"].disabled = not _sticker_pending
+		_sticker_actions["UndoStickerButton"].disabled = _sticker_undo == null
+		_sticker_actions["EditStickerButton"].disabled = _sticker_pending or _sticker_last.is_empty()
 	_doodle.flush()
 	if _camera_returning:
 		_camera_return_elapsed = minf(_camera_return_elapsed + delta, CAMERA_RETURN_DURATION)
@@ -903,11 +922,30 @@ func _begin_drawing(point: Vector2, touch_id: int) -> bool:
 	_drawing = true
 	_drawing_touch = touch_id
 	_drawing_last = point
-	_doodle.begin_stroke()
-	_doodle.stamp(hit.uv)
+	if _sticker_enabled:
+		if _sticker_image == null:
+			_sticker_image = (load("res://res/common/pic/p_1.png") as Texture2D).get_image()
+		if not _sticker_pending:
+			_sticker_base = _doodle.image.duplicate() as Image
+			_sticker_cancel_image = _sticker_base
+			_sticker_pending = true
+		_sticker_uv = hit.uv
+		_sticker_preview_dirty = true
+	else:
+		_sticker_undo = null
+		_sticker_last.clear()
+		_doodle.begin_stroke()
+		_doodle.stamp(hit.uv)
 	return true
 
 func _draw_to(point: Vector2) -> void:
+	if _sticker_enabled:
+		if _sticker_pending and not _over_doodle_controls(point):
+			var hit := _raycast_blob(point, true)
+			if not hit.is_empty():
+				_sticker_uv = hit.uv
+				_sticker_preview_dirty = true
+		return
 	# Sample the screen path, NOT a UV line: UV seams must never create a
 	# spurious black slash through unrelated texture islands or the back face.
 	var count := maxi(1, ceili(_drawing_last.distance_to(point) / 2.0))
@@ -921,7 +959,59 @@ func _draw_to(point: Vector2) -> void:
 			_doodle.stamp(hit.uv)
 	_drawing_last = point
 
+func _refresh_sticker_preview() -> void:
+	if not _sticker_pending or not _sticker_preview_dirty:
+		return
+	_doodle.image = _sticker_base.duplicate() as Image
+	_doodle.place_sticker(_sticker_uv, _sticker_image, _sticker_width, _sticker_angle)
+	_sticker_preview_dirty = false
+
+func _confirm_sticker() -> void:
+	if not _sticker_pending:
+		return
+	_refresh_sticker_preview()
+	_sticker_undo = _sticker_base
+	_sticker_last = {"uv": _sticker_uv, "width": _sticker_width, "angle": _sticker_angle}
+	_sticker_base = null
+	_sticker_cancel_image = null
+	_sticker_pending = false
+	_sticker_preview_dirty = false
+
+func _cancel_sticker() -> void:
+	if _sticker_pending:
+		_doodle.image = _sticker_cancel_image
+		_doodle.dirty = true
+	_sticker_base = null
+	_sticker_cancel_image = null
+	_sticker_pending = false
+	_sticker_preview_dirty = false
+
+func _undo_sticker() -> void:
+	_cancel_sticker()
+	if _sticker_undo != null:
+		_doodle.image = _sticker_undo
+		_doodle.dirty = true
+		_sticker_undo = null
+		_sticker_last.clear()
+
+func _edit_last_sticker() -> void:
+	if _sticker_pending or _sticker_undo == null or _sticker_last.is_empty():
+		return
+	_sticker_cancel_image = _doodle.image.duplicate() as Image
+	_sticker_base = _sticker_undo.duplicate() as Image
+	_sticker_uv = _sticker_last.uv
+	_sticker_width = _sticker_last.width
+	_sticker_angle = _sticker_last.angle
+	_sticker_pending = true
+	_sticker_preview_dirty = true
+	var size_slider := find_child("DoodleSizeSlider", true, false) as VSlider
+	size_slider.value = _sticker_width
+	var rotation := find_child("StickerRotationSlider", true, false) as HSlider
+	rotation.value = rad_to_deg(_sticker_angle)
+
 func _set_doodle_enabled(enabled: bool) -> void:
+	if not enabled:
+		_cancel_sticker()
 	_finish_gesture()
 	_doodle_enabled = enabled
 	_grip_button.visible = not enabled
@@ -1038,7 +1128,40 @@ func _build_doodle_panel(root: Control) -> void:
 	color_picker.tooltip_text = "选择画笔颜色"
 	color_tools.add_child(_make_label("颜色", 20, Color("#735d46")))
 	color_tools.add_child(color_picker)
+	var sticker_button := Button.new()
+	sticker_button.name = "DoodleStickerButton"
+	sticker_button.text = "贴纸"
+	sticker_button.toggle_mode = true
+	sticker_button.icon = load("res://res/common/pic/p_1.png") as Texture2D
+	sticker_button.expand_icon = true
+	sticker_button.add_theme_constant_override("icon_max_width", 48)
+	sticker_button.add_theme_font_override("font", _cjk_font)
+	sticker_button.custom_minimum_size = Vector2(80, 64)
+	color_tools.add_child(sticker_button)
+	sticker_button.toggled.connect(func(enabled: bool):
+		_finish_gesture()
+		if not enabled:
+			_cancel_sticker()
+		_sticker_enabled = enabled
+		_sticker_edit_tools.visible = enabled
+		if enabled:
+			eraser.set_pressed_no_signal(false)
+			_doodle.erasing = false
+		# Switching ranges must not overwrite the remembered brush/sticker sizes.
+		size_slider.set_block_signals(true)
+		size_slider.max_value = 384 if enabled else 48
+		size_slider.min_value = 32 if enabled else 2
+		size_slider.value = _sticker_width if enabled else _doodle.radius * 2.0
+		size_slider.set_block_signals(false)
+		size_label.text = ("贴纸 %d" if enabled else "笔宽 %d") % int(size_slider.value)
+		color_picker.disabled = enabled or _doodle.erasing
+	)
 	size_slider.value_changed.connect(func(value: float):
+		if _sticker_enabled:
+			_sticker_width = int(value)
+			_sticker_preview_dirty = _sticker_pending
+			size_label.text = "贴纸 %d" % int(value)
+			return
 		_doodle.radius = value * 0.5
 		size_label.text = ("擦宽 %d" if _doodle.erasing else "笔宽 %d") % int(value)
 	)
@@ -1046,18 +1169,65 @@ func _build_doodle_panel(root: Control) -> void:
 		_doodle.color = value
 	)
 	eraser.toggled.connect(func(enabled: bool):
+		if enabled:
+			sticker_button.button_pressed = false
 		_doodle.erasing = enabled
 		size_slider.value = _doodle.radius * 2.0
 		size_label.text = ("擦宽 %d" if enabled else "笔宽 %d") % int(size_slider.value)
-		color_picker.disabled = enabled
+		color_picker.disabled = enabled or _sticker_enabled
 	)
 	var clear_button := Button.new()
 	clear_button.name = "ClearDoodleButton"
 	clear_button.text = "清空"
 	clear_button.custom_minimum_size.y = 48
 	clear_button.add_theme_font_override("font", _cjk_font)
-	clear_button.pressed.connect(_doodle.clear)
+	clear_button.pressed.connect(func():
+		_cancel_sticker()
+		_sticker_undo = null
+		_sticker_last.clear()
+		_doodle.clear()
+	)
 	color_tools.add_child(clear_button)
+
+	_sticker_edit_tools = VBoxContainer.new()
+	_sticker_edit_tools.name = "StickerEditTools"
+	_doodle_panel.add_child(_sticker_edit_tools)
+	_sticker_edit_tools.anchor_left = 0.18
+	_sticker_edit_tools.anchor_right = 0.82
+	_sticker_edit_tools.anchor_top = 1.0
+	_sticker_edit_tools.anchor_bottom = 1.0
+	_sticker_edit_tools.offset_top = -220
+	_sticker_edit_tools.offset_bottom = -36
+	_sticker_edit_tools.hide()
+	var help := _make_label("拖动贴纸位置 · 左侧调大小", 20, Color("#735d46"))
+	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_sticker_edit_tools.add_child(help)
+	var rotation := HSlider.new()
+	rotation.name = "StickerRotationSlider"
+	rotation.min_value = -180
+	rotation.max_value = 180
+	rotation.step = 1
+	rotation.custom_minimum_size.y = 48
+	_style_doodle_slider(rotation, false)
+	rotation.value_changed.connect(func(value: float):
+		_sticker_angle = deg_to_rad(value)
+		_sticker_preview_dirty = _sticker_pending
+		help.text = "旋转 %d° · 拖动位置 · 左侧调大小" % int(value)
+	)
+	_sticker_edit_tools.add_child(rotation)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	_sticker_edit_tools.add_child(actions)
+	for entry in [["确认", "ConfirmStickerButton", _confirm_sticker], ["取消", "CancelStickerButton", _cancel_sticker], ["撤销", "UndoStickerButton", _undo_sticker], ["编辑", "EditStickerButton", _edit_last_sticker]]:
+		var action := Button.new()
+		action.text = entry[0]
+		action.name = entry[1]
+		_sticker_actions[entry[1]] = action
+		action.add_theme_font_override("font", _cjk_font)
+		action.custom_minimum_size = Vector2(96, 56)
+		action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		action.pressed.connect(entry[2])
+		actions.add_child(action)
 
 	var right := _doodle_tool_card()
 	right.name = "DoodleZoomToolbar"
