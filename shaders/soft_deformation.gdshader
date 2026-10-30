@@ -24,6 +24,7 @@ uniform bool twist_mode = false;
 uniform vec3 twist_axis = vec3(0.0, 0.0, -1.0);
 uniform float twist_extent = 1.0;
 uniform float twist_direction = 1.0;
+uniform float twist_deformation_scale = 1.0;
 uniform float grip_amount = 0.0;
 uniform vec4 grip_pose = vec4(0.0);
 uniform float grip_stage = 0.0;
@@ -106,12 +107,13 @@ float grip_finger_profile(float z) {
 }
 
 vec3 twist_offset(vec3 p) {
+	float amount = grip_amount * twist_deformation_scale;
 	vec3 c = p - model_center;
 	float axial = dot(c, twist_axis);
 	float t = clamp(axial / twist_extent, -1.0, 1.0);
 	vec3 radial = c - twist_axis * axial;
 	float waist = 1.0 - t * t;
-	float angle = twist_direction * 1.8325957146 * sin(t * 3.14159265359 * 0.5) * grip_amount;
+	float angle = twist_direction * 1.8325957146 * sin(t * 3.14159265359 * 0.5) * amount;
 	float ends = smoothstep(0.25, 0.90, abs(t));
 	vec3 side = normalize(cross(twist_axis, vec3(0.0, 1.0, 0.0)));
 	float side_extent = max(abs(side.x) * model_size.x * 0.5 + abs(side.z) * model_size.z * 0.5, 0.000001);
@@ -129,10 +131,10 @@ vec3 twist_offset(vec3 p) {
 	float depth = 0.76 + 0.24 * sin(theta - 4.1 * t);
 	float local_fold = 0.5 + 0.5 * sin(2.0 * theta + 5.7 * t + 0.8);
 	float wave = (0.065 + 0.045 * ends) * sin(phase) * depth + 0.045 * waist * sin(secondary) * local_fold + 0.022 * waist * waist * sin(fine);
-	float wrinkle = wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, abs(t))) * pow(max(grip_amount, 0.0), 1.5);
-	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * grip_amount + wrinkle;
+	float wrinkle = wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, abs(t))) * pow(max(amount, 0.0), 1.5);
+	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * amount + wrinkle;
 	vec3 rotated = radial * cos(angle) + cross(twist_axis, radial) * sin(angle);
-	vec3 result = rotated + twist_axis * axial * (1.0 + 0.06 * grip_amount) - c;
+	vec3 result = rotated + twist_axis * axial * (1.0 + 0.06 * amount) - c;
 	result.y += model_radius * 1.8 * smoothstep(0.0, 1.0, grip_stage);
 	return result + grip_axis * grip_shake + cross(grip_axis, vec3(0.0, 1.0, 0.0)) * grip_shake_vertical;
 }

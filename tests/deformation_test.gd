@@ -380,6 +380,8 @@ func screenshot(label: String) -> void:
 	main.set_process_unhandled_input(true)
 
 func _run() -> void:
+	if "--japanese" in OS.get_cmdline_user_args():
+		TranslationServer.set_locale("ja")
 	capture = "--capture" in OS.get_cmdline_user_args()
 	root.size = Vector2i(720, 1280)
 	main = load("res://scenes/main.tscn").instantiate()
@@ -393,7 +395,13 @@ func _run() -> void:
 	main.set_physics_process(false)
 	blob = main._blob
 	blob.set_physics_process(false)
-	blob.rebound_vibration = 0.0
+	await check_home_screen()
+	# Existing deformation assertions calibrate against the original controls.
+	for key in {"recovery_time":1.6,"softness":0.9,"min_depth":0.32,"elasticity":0.55,"initial_bounce":0.24,"stretch_sensitivity":1.3,"max_stretch":2.4,"rebound_vibration":0.0}:
+		var defaults := {"recovery_time":1.6,"softness":0.9,"min_depth":0.32,"elasticity":0.55,"initial_bounce":0.24,"stretch_sensitivity":1.3,"max_stretch":2.4,"rebound_vibration":0.0}
+		blob.set(key, defaults[key])
+		if main._feel_sliders.has(key):
+			main._feel_sliders[key].set_value_no_signal(defaults[key])
 	main._physics_process(0.016)
 	await check_reset_then_stretch()
 	var center := screen_point()
@@ -1035,7 +1043,7 @@ func check_grip() -> void:
 	check(blob.grip_amount > 0.7 and blob.grip_amount <= at_release, "Release begins recovery continuously")
 	var overshoot := false
 	var grip_floor_safe := true
-	for i in range(120):
+	for i in range(ceili((blob.recovery_time + 1.0) * 60.0)):
 		advance(1.0 / 60.0)
 		overshoot = overshoot or blob.grip_amount < -0.01
 		grip_floor_safe = grip_floor_safe and blob._target_offset_for(bottom).y > -blob._model_radius * 0.001
@@ -1075,7 +1083,7 @@ func check_grip() -> void:
 	mouse_button(twist_button.get_global_rect().get_center(), false)
 	await process_frame
 	check(not blob._grip_haptic_active and not blob._grip_held, "Twist release immediately stops vibration")
-	advance(2.2)
+	advance(blob.recovery_time + 1.0)
 	check(not blob.is_gripping(), "Twist settles after release")
 	main._set_doodle_enabled(true)
 	check(not button.visible and not twist_button.visible and not blob._grip_held, "Doodle mode hides and cancels grip")
@@ -1143,3 +1151,98 @@ func check_scene_capture() -> void:
 	await screenshot("scene-capture-modal")
 	photo.close()
 	check(not photo.is_open() and photo.jpeg.is_empty(), "Closing capture releases the image and restores scene input")
+
+func check_feel_grip() -> void:
+	for twist in [false, true]:
+		var displacements: Array[float] = []
+		var settle_times: Array[float] = []
+		var rebounds: Array[float] = []
+		for feel in range(4):
+			main._home.select(feel)
+			blob.set_grip_axis(main._camera.global_basis.x)
+			if twist:
+				blob.begin_twist()
+			else:
+				blob.set_grip_held(true)
+			advance(1.5)
+			# Remove the shared lift/shake when comparing actual deformation.
+			blob._grip_shake = 0.0
+			blob._grip_shake_vertical = 0.0
+			var sample: Vector3 = blob._model_center + Vector3(blob._model_size.x * 0.4, blob._model_size.y * 0.4, 0.0)
+			var lift := Vector3.UP * blob._model_radius * 1.8 * smoothstep(0.0, 1.0, blob.grip_stage)
+			displacements.append((blob._grip_offset(sample) - lift).length())
+			check(blob.grip_amount > 0.99 and blob._grip_shake_duration > 0.0, "Every feel reaches its own limit and shake: " + str(feel) + "/" + str(twist))
+			blob.set_grip_held(false)
+			var elapsed := 0.0
+			var rebound := 0.0
+			while blob.is_gripping() and elapsed < 8.0:
+				advance(1.0 / 60.0)
+				elapsed += 1.0 / 60.0
+				rebound = maxf(rebound, -blob.grip_amount)
+			settle_times.append(elapsed)
+			rebounds.append(rebound)
+			check(not blob.is_gripping(), "Feel spring fully settles: " + str(feel) + "/" + str(twist))
+		check(displacements[0] > displacements[2] and displacements[2] > displacements[3], "Softer feels produce larger actual grip/twist deformation: " + str(twist))
+		check(settle_times[2] < settle_times[0] and settle_times[0] < settle_times[1], "Elastic feel recovers fastest, mud recovers slower: " + str(twist))
+		check(rebounds[2] > rebounds[0] and rebounds[0] > rebounds[1], "Higher elasticity produces stronger release oscillation: " + str(twist))
+	main._home.select(0)
+
+func check_home_screen() -> void:
+	check(main._home_active and main._home.visible and not main._hud_root.visible, "Launch shows home and hides interaction HUD")
+	var center := screen_point()
+	mouse_button(center, true)
+	await process_frame
+	motion(center + Vector2(100, 0), true)
+	mouse_button(center + Vector2(100, 0), false)
+	await process_frame
+	check(not main._dragging and not main._drawing and not main._is_rotating and max_offset() < 0.00001, "Home blocks press stretch drawing and rotation")
+	for i in range(4):
+		main._home.select(i)
+		var parameters: Dictionary = main.FeelPresets.parameters(i)
+		var matches := true
+		for key in parameters:
+			matches = matches and is_equal_approx(float(blob.get(key)),float(parameters[key]))
+		var selected_count := 0
+		for choice in main._home.choices:
+			selected_count += int(choice.button_pressed)
+		check(selected_count == 1, "Home keeps exactly one selected feel: " + str(i))
+		check(matches, "Feel preset applies all softness and rebound parameters: " + str(i))
+	check(main.FeelPresets.parameters(2).recovery_time < main.FeelPresets.parameters(1).recovery_time, "More elastic preset restores faster")
+	check_feel_grip()
+	main._home.select(0)
+	await screenshot("home")
+	var start: Button = main._home.find_child("StartSquishingButton", true, false)
+	var home_distance: float = main._camera.position.distance_to(main._look_at_target)
+	start.pressed.emit()
+	check(is_equal_approx(main._camera.position.distance_to(main._look_at_target), home_distance), "Starting game does not jump camera")
+	advance(main.PAGE_CAMERA_DURATION * 0.5)
+	var middle_distance: float = main._camera.position.distance_to(main._look_at_target)
+	check(middle_distance < home_distance and middle_distance > home_distance / 1.2, "Entering game smoothly moves camera closer")
+	advance(main.PAGE_CAMERA_DURATION)
+	check(is_equal_approx(main._camera.position.distance_to(main._look_at_target), home_distance / 1.2), "Game camera moves closer for twenty percent larger framing")
+	check(not main._home_active and main._hud_root.visible, "Start button enables the interaction screen")
+	main._model_root.rotate_y(1.7)
+	var rotated: Quaternion = main._model_root.quaternion
+	var game_view: Transform3D = main._camera.transform
+	main._return_home()
+	check(main._camera.transform.is_equal_approx(game_view) and main._model_root.quaternion.is_equal_approx(rotated), "Returning home preserves the first frame without a view or model jump")
+	advance(main.PAGE_CAMERA_DURATION * 0.5)
+	check(main._camera.position.distance_to(game_view.origin) > 0.01 and main._model_root.quaternion.angle_to(main._default_model_rotation) < rotated.angle_to(main._default_model_rotation), "Home transition smoothly restores both camera and product angle")
+	advance(main.PAGE_CAMERA_DURATION)
+	check(is_equal_approx(main._camera.position.distance_to(main._look_at_target), home_distance), "Return home restores original framing")
+	check(main._model_root.quaternion.is_equal_approx(main._default_model_rotation), "Return home restores the authored default product angle")
+	check(main._home_active and not blob.is_gripping(), "Returning home cancels deformation actions")
+	main._start_game()
+	advance(main.PAGE_CAMERA_DURATION)
+	check(is_equal_approx(main._camera.position.distance_to(main._look_at_target), home_distance / 1.2), "Repeated entry preserves game camera framing")
+	main._set_doodle_enabled(true)
+	main._doodle_zoom = 1.7
+	main._doodle_elevation = deg_to_rad(85.0)
+	main._update_camera_position()
+	var doodle_view: Transform3D = main._camera.transform
+	main._return_home()
+	check(main._camera.transform.is_equal_approx(doodle_view), "Returning from a zoomed doodle view does not jump")
+	advance(main.PAGE_CAMERA_DURATION)
+	check(is_equal_approx(main._camera.position.distance_to(main._look_at_target), home_distance), "Doodle return also reaches default home framing")
+	main._start_game()
+	advance(main.PAGE_CAMERA_DURATION)

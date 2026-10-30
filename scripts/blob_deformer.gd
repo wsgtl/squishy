@@ -91,6 +91,8 @@ var _indices := PackedInt32Array()
 # Fixed hand span, calibrated against the rest model, never projected length.
 const GRIP_HAND_SPAN_RATIO := 0.54
 
+@export_range(0.1, 1.25, 0.01) var grip_deformation_scale := 1.0
+@export_range(0.1, 1.25, 0.01) var twist_deformation_scale := 1.0
 @export var twist_axis_local := Vector3.ZERO # Zero selects the longer X/Z rest axis so the two short ends twist.
 var _twist_mode := false
 var _twist_direction := 1.0
@@ -111,9 +113,7 @@ var _grip_shake_vertical_phase := 0.0
 var _grip_shake_time := 0.0
 var _grip_shake_duration := 0.0
 var _grip_shake_amplitude := 0.0
-const GRIP_HAPTIC_INTERVAL := 0.03
 const GRIP_HAPTIC_MAX_STRENGTH := 0.18
-var _grip_haptic_cooldown := 0.0
 var _grip_haptic_active := false
 var _grip_rng := RandomNumberGenerator.new()
 
@@ -478,7 +478,7 @@ func _twist_offset(p: Vector3) -> Vector3:
 	var axial := c.dot(_twist_axis)
 	var t := clampf(axial / _twist_extent, -1.0, 1.0)
 	var radial := c - _twist_axis * axial
-	var amount := grip_amount
+	var amount := grip_amount * twist_deformation_scale
 	var waist := 1.0 - t * t
 	var angle := _twist_direction * deg_to_rad(105.0) * sin(t * PI * 0.5) * amount
 	# Broad waist compression and rounded end bulges; wrinkles follow a helix.
@@ -531,11 +531,14 @@ func is_gripping() -> bool:
 func _step_grip(delta: float) -> void:
 	if not is_gripping():
 		return
-	grip_stage = move_toward(grip_stage, 1.0 if _grip_held else 0.0, minf(delta, 0.1) / (0.65 if _grip_held else 1.0))
+	var recovery := clampf(recovery_time, 0.3, 4.0)
+	grip_stage = move_toward(grip_stage, 1.0 if _grip_held else 0.0, minf(delta, 0.1) / (0.65 if _grip_held else maxf(0.65, recovery * 0.65)))
 	var steps := maxi(1, ceili(minf(delta, 0.1) * 120.0))
 	var dt := minf(delta, 0.1) / steps
-	var omega := 8.0 if _grip_held else 16.0
-	var damping := 1.0 if _grip_held else 0.4
+	# Keep normalized hold progress for the camera and limit shake; only the
+	# deformation channels scale with softness. Release uses the feel's spring.
+	var damping := 1.0 if _grip_held else clampf(0.95 - 0.63 * elasticity - 0.15 * initial_bounce / 0.6, 0.25, 0.95)
+	var omega := 8.0 if _grip_held else 12.0 / (damping * recovery)
 	for i in range(steps):
 		_grip_velocity += (omega * omega * ((1.0 if _grip_held else 0.0) - grip_amount) - 2.0 * damping * omega * _grip_velocity) * dt
 		grip_amount += _grip_velocity * dt
@@ -549,7 +552,6 @@ func _step_grip(delta: float) -> void:
 
 # One random, smooth left/right pulse per cycle; only a scalar is sent to the GPU.
 func _step_grip_shake(delta: float) -> void:
-	_grip_haptic_cooldown = maxf(0.0, _grip_haptic_cooldown - delta)
 	if not _grip_held or grip_amount < 0.94:
 		_grip_shake *= exp(-30.0 * delta)
 		_grip_shake_vertical *= exp(-30.0 * delta)
@@ -568,8 +570,9 @@ func _step_grip_shake(delta: float) -> void:
 		_grip_shake_vertical_phase = _grip_rng.randf_range(-PI, PI)
 		if _grip_rng.randf() < 0.5:
 			_grip_shake_amplitude *= -1.0
-	var strength := absf(_grip_shake_amplitude) / (_model_radius * 0.022) * smoothstep(0.94, 1.0, grip_amount)
-	_grip_haptic(strength, _grip_shake_duration)
+		# Exactly one tap per visual shake cycle, shared by squeeze and twist.
+		var strength := absf(_grip_shake_amplitude) / (_model_radius * 0.022) * smoothstep(0.94, 1.0, grip_amount)
+		_grip_haptic(strength, _grip_shake_duration)
 	_grip_shake_time = minf(_grip_shake_time + delta, _grip_shake_duration)
 	var phase := _grip_shake_time / _grip_shake_duration
 	var envelope := pow(sin(PI * phase), 2.0) * smoothstep(0.94, 1.0, grip_amount)
@@ -577,9 +580,8 @@ func _step_grip_shake(delta: float) -> void:
 	_grip_shake_vertical = _grip_shake_amplitude * _grip_shake_vertical_ratio * sin(TAU * phase + _grip_shake_vertical_phase) * envelope
 
 func _grip_haptic(strength: float, duration: float) -> void:
-	if _grip_haptic_cooldown > 0.0 or strength < 0.05:
+	if strength < 0.05:
 		return
-	_grip_haptic_cooldown = GRIP_HAPTIC_INTERVAL
 	_grip_haptic_active = true
 	var level := clampf(strength, 0.0, 1.0)
 	# Sparse short taps; web vibration has no amplitude control.
@@ -590,7 +592,6 @@ func _grip_haptic(strength: float, duration: float) -> void:
 		Input.vibrate_handheld(milliseconds, GRIP_HAPTIC_MAX_STRENGTH * level)
 
 func _stop_grip_haptic() -> void:
-	_grip_haptic_cooldown = 0.0
 	if not _grip_haptic_active:
 		return
 	_grip_haptic_active = false
@@ -615,11 +616,11 @@ func _grip_finger_profile(z: float) -> float:
 # Each channel has its own progression instead of scaling one final shape.
 func _grip_pose_parameters(amount: float) -> Vector4:
 	if amount <= 0.0:
-		return Vector4(amount, amount, 0.0, amount * 0.35)
+		return Vector4(amount, amount, 0.0, amount * 0.35) * grip_deformation_scale
 	var keys := [Vector4.ZERO, Vector4(0.32, 0.10, 0.18, 0.02), Vector4(0.57, 0.25, 0.36, 0.12), Vector4(0.84, 0.63, 0.78, 0.60), Vector4.ONE]
 	var phase := clampf(amount, 0.0, 1.0) * 4.0
 	var index := mini(int(phase), 3)
-	return keys[index].lerp(keys[index + 1], smoothstep(0.0, 1.0, phase - index))
+	return keys[index].lerp(keys[index + 1], smoothstep(0.0, 1.0, phase - index)) * grip_deformation_scale
 
 func _grip_offset(p: Vector3) -> Vector3:
 	if _twist_mode:
@@ -1048,6 +1049,7 @@ func _sync_gpu() -> void:
 	_shader_material.set_shader_parameter("twist_axis", _twist_axis)
 	_shader_material.set_shader_parameter("twist_extent", _twist_extent)
 	_shader_material.set_shader_parameter("twist_direction", _twist_direction)
+	_shader_material.set_shader_parameter("twist_deformation_scale", twist_deformation_scale)
 	_shader_material.set_shader_parameter("grip_amount", grip_amount)
 	_shader_material.set_shader_parameter("grip_pose", _grip_pose_parameters(grip_amount))
 	_shader_material.set_shader_parameter("grip_stage", grip_stage)

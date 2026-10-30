@@ -15,6 +15,10 @@ run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+LocaleManager="*res://scripts/locale_manager.gd"
+
 [display]
 
 window/size/viewport_width=720

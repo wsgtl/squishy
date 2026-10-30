@@ -4,6 +4,13 @@ const MODEL_PATH := "res://glb/sfl.glb"
 const MODEL_WIDTH := 2.0
 const SceneCapture = preload("res://scripts/scene_capture.gd")
 var _scene_capture: CanvasLayer
+const FeelPresets = preload("res://scripts/feel_presets.gd")
+const HomeScreen = preload("res://scripts/home_screen.gd")
+var _home_active := true
+var _selected_feel := 0
+var _hud_root: Control
+var _home: Control
+var _feel_sliders: Dictionary = {}
 
 const BlobScript = preload("res://scripts/blob_deformer.gd")
 
@@ -33,6 +40,14 @@ var _doodle_ui_dimmed := false
 var _doodle_elevation := 1.05
 var _doodle_angle_mode := false
 const CAMERA_RETURN_DURATION := 0.55
+const PAGE_CAMERA_DURATION := 0.3
+var _page_camera_elapsed := PAGE_CAMERA_DURATION
+var _page_camera_start_dist := 4.5
+var _page_camera_start_y := 2.8
+var _page_camera_start_transform := Transform3D.IDENTITY
+var _page_restoring_pose := false
+var _page_model_start := Quaternion.IDENTITY
+var _default_model_rotation := Quaternion.IDENTITY
 var _camera_returning := false
 var _camera_return_elapsed := 0.0
 
@@ -70,6 +85,8 @@ var _param_visible := false
 
 # 镜头后退程度 (0-1.5, 默认1)
 var _camera_retract: float = 1.0
+const GAME_VIEW_SCALE := 1.2
+var _home_camera_dist: float = 4.5
 var _base_camera_dist: float = 4.5
 var _base_camera_y: float = 2.8
 var _look_at_target := Vector3(0.0, 1.0, 0.0)
@@ -85,18 +102,101 @@ func _ready() -> void:
 	_build_environment()
 	_build_stage()
 	_build_blob()
+	_default_model_rotation = _model_root.quaternion
 	_build_hud()
 	_blob.set_doodle_texture(_doodle.texture)
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	_home = HomeScreen.new()
+	layer.add_child(_home)
+	_home.setup(self, _cjk_font)
+	_hud_root.hide()
+	LocaleManager.language_changed.connect(_refresh_language)
+
+func _refresh_language() -> void:
+	_load_font()
+	LocaleManager.refresh_controls(self, _cjk_font)
+	_home.refresh_language()
+	var size_slider := find_child("DoodleSizeSlider", true, false) as VSlider
+	var size_label := find_child("DoodleSizeLabel", true, false) as Label
+	size_label.text = tr("贴纸 %d") % int(size_slider.value) if _sticker_enabled else (tr("擦宽 %d") if _doodle.erasing else tr("笔宽 %d")) % int(size_slider.value)
+	var help := find_child("StickerHelpLabel", true, false) as Label
+	help.text = tr("旋转 %d° · 拖动位置 · 左侧调大小") % int(rad_to_deg(_sticker_angle))
+	_scene_capture.dialog.filters = PackedStringArray([tr("*.jpg, *.jpeg ; JPEG 图片")])
+	for platform in ["X", "LINE"]:
+		var share := _scene_capture.find_child(platform + "ShareButton", true, false) as Button
+		share.tooltip_text = tr("在 %s 分享文字和游戏链接") % platform
+
+func _apply_feel(index: int) -> void:
+	_selected_feel = clampi(index, 0, FeelPresets.TYPES.size() - 1)
+	_finish_gesture()
+	_blob.cancel_grip()
+	_blob.reset_deformation()
+	var parameters := FeelPresets.parameters(_selected_feel)
+	for key in parameters:
+		_blob.set(key, parameters[key])
+		if _feel_sliders.has(key):
+			(_feel_sliders[key] as Range).set_value_no_signal(parameters[key])
+	_blob._sync_gpu()
+
+func _return_home() -> void:
+	var current_view := _camera.transform
+	if _scene_capture != null and _scene_capture.is_open():
+		_scene_capture.close()
+	if _doodle_enabled:
+		_set_doodle_enabled(false)
+	_close_param_panel()
+	_finish_gesture()
+	_blob.cancel_grip()
+	_blob.reset_deformation()
+	_home_active = true
+	_set_page_camera(true)
+	# Capture the visible view before cancelling lifted/doodle camera states.
+	_page_camera_start_transform = current_view
+	_update_camera_position()
+	_hud_root.hide()
+	_home.show()
+
+func _start_game() -> void:
+	_finish_gesture()
+	_blob.reset_deformation()
+	_home_active = false
+	_set_page_camera(true)
+	_home.hide()
+	_hud_root.show()
+
+func _set_page_camera(animated := false) -> void:
+	_page_camera_start_transform = _camera.transform
+	_page_restoring_pose = animated and (_home_active or _page_restoring_pose)
+	_page_model_start = _model_root.quaternion
+	# Always derive from the original home distance; repeated page changes do
+	# not compound zoom. All gesture cameras use these shared base values.
+	_base_camera_dist = _home_camera_dist / (1.0 if _home_active else GAME_VIEW_SCALE)
+	_base_camera_y = _look_at_target.y + _base_camera_dist * sin(_camera_polar)
+	_camera_target_dist = _base_camera_dist
+	_camera_target_y = _base_camera_y
+	_page_camera_start_dist = _camera_current_dist
+	_page_camera_start_y = _camera_current_y
+	_page_camera_elapsed = 0.0 if animated else PAGE_CAMERA_DURATION
+	if not animated:
+		_camera_current_dist = _base_camera_dist
+		_camera_current_y = _base_camera_y
+	_camera_returning = false
+	_doodle_zoom = 1.0
+	_doodle_elevation = _camera_polar
+	_update_camera_position()
 
 func _load_font() -> void:
-	_cjk_font = load("res://fonts/NotoSansSC-Regular.ttf")
+	_cjk_font = load(LocaleManager.font_path())
 	if _cjk_font == null:
 		_cjk_font = FontFile.new()
-		_cjk_font.font_path = "res://fonts/NotoSansSC-Regular.ttf"
+		_cjk_font.font_path = LocaleManager.font_path()
 
 # Capture an already-owned gesture before GUI dispatch so releasing over the
 # parameter panel cannot leave the model stuck. New gestures still respect UI.
 func _input(event: InputEvent) -> void:
+	if _home_active:
+		return
 	if _scene_capture != null and _scene_capture.is_open():
 		return
 	if _blob.is_gripping():
@@ -157,6 +257,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _home_active:
+		return
 	if _scene_capture != null and _scene_capture.is_open():
 		return
 	if _blob.is_gripping():
@@ -241,14 +343,24 @@ func _touch_separation() -> Vector3:
 	return b - a if a != null and b != null else Vector3.ZERO
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(_blob):
 		_finish_gesture()
 		_blob.set_grip_held(false)
 
 func _physics_process(delta: float) -> void:
-	_camera_current_dist = lerpf(_camera_current_dist, _camera_target_dist, minf(delta * 4.0, 1.0))
-	_camera_current_y = lerpf(_camera_current_y, _camera_target_y, minf(delta * 4.0, 1.0))
+	if _page_camera_elapsed < PAGE_CAMERA_DURATION:
+		_page_camera_elapsed = minf(_page_camera_elapsed + delta, PAGE_CAMERA_DURATION)
+		var blend := smoothstep(0.0, 1.0, _page_camera_elapsed / PAGE_CAMERA_DURATION)
+		_camera_current_dist = lerpf(_page_camera_start_dist, _camera_target_dist, blend)
+		_camera_current_y = lerpf(_page_camera_start_y, _camera_target_y, blend)
+		if _page_restoring_pose:
+			_model_root.quaternion = _page_model_start.slerp(_default_model_rotation, blend)
+	else:
+		_camera_current_dist = lerpf(_camera_current_dist, _camera_target_dist, minf(delta * 4.0, 1.0))
+		_camera_current_y = lerpf(_camera_current_y, _camera_target_y, minf(delta * 4.0, 1.0))
 	_update_camera_position()
+	if _page_camera_elapsed >= PAGE_CAMERA_DURATION:
+		_page_restoring_pose = false
 	if not _dragging:
 		return
 	if not _stretching:
@@ -306,6 +418,9 @@ func _update_camera_position() -> void:
 		var horizontal := Vector3(cos(_camera_azimuth), 0.0, sin(_camera_azimuth))
 		_camera.position = target + (horizontal * cos(angle) + Vector3.UP * sin(angle)) * offset.length()
 		_camera.look_at(target, Vector3.UP * cos(angle) - horizontal * sin(angle))
+	if _page_restoring_pose and _page_camera_elapsed < PAGE_CAMERA_DURATION:
+		var blend := smoothstep(0.0, 1.0, _page_camera_elapsed / PAGE_CAMERA_DURATION)
+		_camera.transform = _page_camera_start_transform.interpolate_with(_camera.transform, blend)
 
 func _rotate_model(delta: Vector2) -> void:
 	if _model_root == null or _blob.is_gripping():
@@ -589,6 +704,7 @@ func _auto_focus_camera(model_root: Node) -> void:
 	_camera_current_dist = dist
 	_camera_target_y = center.y + dist * sin(_camera_polar)
 	_camera_current_y = _camera_target_y
+	_home_camera_dist = dist
 	_base_camera_dist = dist
 	_base_camera_y = _camera_target_y
 	_look_at_target = center
@@ -597,12 +713,13 @@ func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var root := Control.new()
+	_hud_root = root
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(root)
 
 	_param_button = Button.new()
-	_param_button.text = "参数"
+	_param_button.text = tr("参数")
 	_param_button.position = Vector2(24.0, 24.0)
 	_param_button.custom_minimum_size = Vector2(160.0, 80.0)
 	_param_button.add_theme_font_size_override("font_size", 24)
@@ -611,21 +728,31 @@ func _build_hud() -> void:
 	_param_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(_param_button)
 	_build_doodle_panel(root)
+	var home_button := Button.new()
+	home_button.name = "ReturnHomeButton"
+	home_button.text = tr("首页")
+	home_button.position = Vector2(452, 24)
+	home_button.custom_minimum_size = Vector2(110, 80)
+	home_button.add_theme_font_override("font", _cjk_font)
+	home_button.add_theme_font_size_override("font_size",24)
+	home_button.pressed.connect(_return_home)
+	root.add_child(home_button)
 
-	_param_panel = _build_modal(root, "参数设置", _close_param_panel)
+	_param_panel = _build_modal(root, tr("参数设置"), _close_param_panel)
 	_param_panel.name = "ParameterModal"
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override("separation", 18)
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	(_param_panel.get_meta("content") as ScrollContainer).add_child(content)
+	content.add_child(LocaleManager.make_selector(_cjk_font))
 
 	var press_feel_switch := CheckButton.new()
 	press_feel_switch.name = "RaisedRimPressSwitch"
-	press_feel_switch.text = "按压收拢与翘边"
+	press_feel_switch.text = tr("按压收拢与翘边")
 	press_feel_switch.button_pressed = _blob.raised_rim_press
 	press_feel_switch.add_theme_font_override("font", _cjk_font)
 	press_feel_switch.add_theme_font_size_override("font_size", 26)
-	press_feel_switch.tooltip_text = "开启：四周向按压点收拢、侧缘圆弧翘起；关闭：原版按压手感"
+	press_feel_switch.tooltip_text = tr("开启：四周向按压点收拢、侧缘圆弧翘起；关闭：原版按压手感")
 	press_feel_switch.toggled.connect(func(enabled: bool):
 		_finish_gesture()
 		_blob.set_raised_rim_press(enabled)
@@ -636,7 +763,7 @@ func _build_hud() -> void:
 	var recovery_row := HBoxContainer.new()
 	recovery_row.add_theme_constant_override("separation", 20)
 	content.add_child(recovery_row)
-	recovery_row.add_child(_make_label("回弹时长", 26, Color("#fff2dc")))
+	recovery_row.add_child(_make_label(tr("回弹时长"), 26, Color("#fff2dc")))
 	var recovery_slider := HSlider.new()
 	recovery_slider.min_value = 0.3
 	recovery_slider.max_value = 4.0
@@ -646,12 +773,13 @@ func _build_hud() -> void:
 	recovery_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	recovery_slider.value_changed.connect(_on_recovery_changed)
 	recovery_row.add_child(recovery_slider)
+	_feel_sliders["recovery_time"] = recovery_slider
 
 	# 柔软度
 	var softness_row := HBoxContainer.new()
 	softness_row.add_theme_constant_override("separation", 20)
 	content.add_child(softness_row)
-	softness_row.add_child(_make_label("柔软度", 26, Color("#fff2dc")))
+	softness_row.add_child(_make_label(tr("柔软度"), 26, Color("#fff2dc")))
 	var softness_slider := HSlider.new()
 	softness_slider.min_value = 0.2
 	softness_slider.max_value = 1.6
@@ -661,12 +789,13 @@ func _build_hud() -> void:
 	softness_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	softness_slider.value_changed.connect(_on_softness_changed)
 	softness_row.add_child(softness_slider)
+	_feel_sliders["softness"] = softness_slider
 
 	# 按压深度
 	var depth_row := HBoxContainer.new()
 	depth_row.add_theme_constant_override("separation", 20)
 	content.add_child(depth_row)
-	depth_row.add_child(_make_label("按压深度", 26, Color("#fff2dc")))
+	depth_row.add_child(_make_label(tr("按压深度"), 26, Color("#fff2dc")))
 	var depth_slider := HSlider.new()
 	depth_slider.min_value = 0.1
 	depth_slider.max_value = 0.5
@@ -676,12 +805,13 @@ func _build_hud() -> void:
 	depth_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	depth_slider.value_changed.connect(_on_depth_changed)
 	depth_row.add_child(depth_slider)
+	_feel_sliders["min_depth"] = depth_slider
 
 	# 手指宽度
 	var finger_row := HBoxContainer.new()
 	finger_row.add_theme_constant_override("separation", 20)
 	content.add_child(finger_row)
-	finger_row.add_child(_make_label("手指宽度", 26, Color("#fff2dc")))
+	finger_row.add_child(_make_label(tr("手指宽度"), 26, Color("#fff2dc")))
 	var finger_slider := HSlider.new()
 	finger_slider.min_value = 0.072
 	finger_slider.max_value = 0.216
@@ -696,7 +826,7 @@ func _build_hud() -> void:
 	var elastic_row := HBoxContainer.new()
 	elastic_row.add_theme_constant_override("separation", 20)
 	content.add_child(elastic_row)
-	elastic_row.add_child(_make_label("弹性抖动", 26, Color("#fff2dc")))
+	elastic_row.add_child(_make_label(tr("弹性抖动"), 26, Color("#fff2dc")))
 	var elastic_slider := HSlider.new()
 	elastic_slider.min_value = 0.0
 	elastic_slider.max_value = 1.0
@@ -706,12 +836,13 @@ func _build_hud() -> void:
 	elastic_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	elastic_slider.value_changed.connect(_on_elastic_changed)
 	elastic_row.add_child(elastic_slider)
+	_feel_sliders["elasticity"] = elastic_slider
 
 	# 初始回弹
 	var bounce_row := HBoxContainer.new()
 	bounce_row.add_theme_constant_override("separation", 20)
 	content.add_child(bounce_row)
-	bounce_row.add_child(_make_label("初始回弹", 26, Color("#fff2dc")))
+	bounce_row.add_child(_make_label(tr("初始回弹"), 26, Color("#fff2dc")))
 	var bounce_slider := HSlider.new()
 	bounce_slider.min_value = 0.0
 	bounce_slider.max_value = 0.6
@@ -721,12 +852,13 @@ func _build_hud() -> void:
 	bounce_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bounce_slider.value_changed.connect(_on_bounce_changed)
 	bounce_row.add_child(bounce_slider)
+	_feel_sliders["initial_bounce"] = bounce_slider
 
 	# 拉伸灵敏度
 	var sensitivity_row := HBoxContainer.new()
 	sensitivity_row.add_theme_constant_override("separation", 20)
 	content.add_child(sensitivity_row)
-	sensitivity_row.add_child(_make_label("拉伸灵敏度", 26, Color("#fff2dc")))
+	sensitivity_row.add_child(_make_label(tr("拉伸灵敏度"), 26, Color("#fff2dc")))
 	var sensitivity_slider := HSlider.new()
 	sensitivity_slider.min_value = 0.3
 	sensitivity_slider.max_value = 2.5
@@ -736,12 +868,13 @@ func _build_hud() -> void:
 	sensitivity_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sensitivity_slider.value_changed.connect(_on_sensitivity_changed)
 	sensitivity_row.add_child(sensitivity_slider)
+	_feel_sliders["stretch_sensitivity"] = sensitivity_slider
 
 	# 最大拉伸
 	var max_stretch_row := HBoxContainer.new()
 	max_stretch_row.add_theme_constant_override("separation", 20)
 	content.add_child(max_stretch_row)
-	max_stretch_row.add_child(_make_label("最大拉伸", 26, Color("#fff2dc")))
+	max_stretch_row.add_child(_make_label(tr("最大拉伸"), 26, Color("#fff2dc")))
 	var max_stretch_slider := HSlider.new()
 	max_stretch_slider.min_value = 0.8
 	max_stretch_slider.max_value = 3.6
@@ -751,12 +884,13 @@ func _build_hud() -> void:
 	max_stretch_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	max_stretch_slider.value_changed.connect(_on_max_stretch_changed)
 	max_stretch_row.add_child(max_stretch_slider)
+	_feel_sliders["max_stretch"] = max_stretch_slider
 
 	# 镜头后退
 	var camera_row := HBoxContainer.new()
 	camera_row.add_theme_constant_override("separation", 20)
 	content.add_child(camera_row)
-	camera_row.add_child(_make_label("镜头后退", 26, Color("#fff2dc")))
+	camera_row.add_child(_make_label(tr("镜头后退"), 26, Color("#fff2dc")))
 	var camera_slider := HSlider.new()
 	camera_slider.min_value = 0.0
 	camera_slider.max_value = 1.5
@@ -771,7 +905,7 @@ func _build_hud() -> void:
 	var vibration_row := HBoxContainer.new()
 	vibration_row.add_theme_constant_override("separation", 20)
 	content.add_child(vibration_row)
-	vibration_row.add_child(_make_label("回弹震动", 26, Color("#fff2dc")))
+	vibration_row.add_child(_make_label(tr("回弹震动"), 26, Color("#fff2dc")))
 	var vibration_slider := HSlider.new()
 	vibration_slider.min_value = 0.0
 	vibration_slider.max_value = 0.5
@@ -781,10 +915,11 @@ func _build_hud() -> void:
 	vibration_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vibration_slider.value_changed.connect(_on_vibration_changed)
 	vibration_row.add_child(vibration_slider)
+	_feel_sliders["rebound_vibration"] = vibration_slider
 
 	_grip_button = Button.new()
 	_grip_button.name = "GripButton"
-	_grip_button.text = "按住挤压"
+	_grip_button.text = tr("按住挤压")
 	root.add_child(_grip_button)
 	_grip_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	_grip_button.offset_left = -250
@@ -795,7 +930,7 @@ func _build_hud() -> void:
 	_grip_button.add_theme_font_size_override("font_size", 28)
 	_grip_button.focus_mode = Control.FOCUS_NONE
 	_grip_button.button_down.connect(func():
-		if not _doodle_enabled and not _blob.is_gripping():
+		if not _home_active and not _doodle_enabled and not _blob.is_gripping():
 			_finish_gesture()
 			_blob.set_grip_axis(_camera.global_basis.x)
 			_blob.set_grip_held(true)
@@ -806,7 +941,7 @@ func _build_hud() -> void:
 	)
 	_twist_button = Button.new()
 	_twist_button.name = "TwistButton"
-	_twist_button.text = "按住扭转"
+	_twist_button.text = tr("按住扭转")
 	root.add_child(_twist_button)
 	_twist_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	_twist_button.offset_left = 10
@@ -817,7 +952,7 @@ func _build_hud() -> void:
 	_twist_button.add_theme_font_size_override("font_size", 28)
 	_twist_button.focus_mode = Control.FOCUS_NONE
 	_twist_button.button_down.connect(func():
-		if not _doodle_enabled and not _blob.is_gripping():
+		if not _home_active and not _doodle_enabled and not _blob.is_gripping():
 			_finish_gesture()
 			_blob.set_grip_axis(_camera.global_basis.x)
 			_blob.begin_twist()
@@ -830,7 +965,7 @@ func _build_hud() -> void:
 
 	var footer := Label.new()
 	footer.name = "InteractionHint"
-	footer.text = "单指 / 左键按压 · 双指 / Shift 拉伸"
+	footer.text = tr("单指 / 左键按压 · 双指 / Shift 拉伸")
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	footer.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	footer.offset_left = 0.0
@@ -1049,8 +1184,8 @@ func _set_doodle_enabled(enabled: bool) -> void:
 	_update_camera_position()
 	var hint := find_child("InteractionHint", true, false) as Label
 	if hint != null:
-		hint.text = "在模型上绘制 · 拖动空白处旋转" if enabled else "单指 / 左键按压 · 双指 / Shift 拉伸"
-	_doodle_button.text = "退出涂鸦" if enabled else "涂鸦"
+		hint.text = tr("在模型上绘制 · 拖动空白处旋转") if enabled else tr("单指 / 左键按压 · 双指 / Shift 拉伸")
+	_doodle_button.text = tr("退出涂鸦") if enabled else tr("涂鸦")
 	if enabled:
 		_doodle_panel.move_to_front()
 
@@ -1065,7 +1200,7 @@ func _over_doodle_controls(point: Vector2) -> bool:
 func _build_doodle_panel(root: Control) -> void:
 	_doodle_button = Button.new()
 	_doodle_button.name = "DoodleButton"
-	_doodle_button.text = "涂鸦"
+	_doodle_button.text = tr("涂鸦")
 	_doodle_button.position = Vector2(208, 24)
 	_doodle_button.custom_minimum_size = Vector2(220, 80)
 	_doodle_button.add_theme_font_size_override("font_size", 24)
@@ -1091,7 +1226,7 @@ func _build_doodle_panel(root: Control) -> void:
 	left.add_child(box)
 	var eraser := CheckButton.new()
 	eraser.name = "DoodleEraserSwitch"
-	eraser.text = "橡皮擦"
+	eraser.text = tr("橡皮擦")
 	eraser.custom_minimum_size = Vector2(140, 72)
 	eraser.add_theme_font_override("font", _cjk_font)
 	eraser.add_theme_font_size_override("font_size", 20)
@@ -1107,7 +1242,8 @@ func _build_doodle_panel(root: Control) -> void:
 	eraser.offset_left = 4
 	eraser.offset_right = 144
 	eraser.offset_bottom = 72
-	var size_label := _make_label("笔宽 10", 20, Color("#735d46"))
+	var size_label := _make_label(tr("笔宽 10"), 20, Color("#735d46"))
+	size_label.name = "DoodleSizeLabel"
 	size_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(size_label)
 	var size_slider := VSlider.new()
@@ -1134,12 +1270,12 @@ func _build_doodle_panel(root: Control) -> void:
 	color_picker.edit_alpha = true
 	_configure_doodle_color_picker(color_picker)
 	color_picker.custom_minimum_size = Vector2(80, 56)
-	color_picker.tooltip_text = "选择画笔颜色"
-	color_tools.add_child(_make_label("颜色", 20, Color("#735d46")))
+	color_picker.tooltip_text = tr("选择画笔颜色")
+	color_tools.add_child(_make_label(tr("颜色"), 20, Color("#735d46")))
 	color_tools.add_child(color_picker)
 	var sticker_button := Button.new()
 	sticker_button.name = "DoodleStickerButton"
-	sticker_button.text = "贴纸"
+	sticker_button.text = tr("贴纸")
 	sticker_button.toggle_mode = true
 	sticker_button.icon = load("res://res/common/pic/p_1.png") as Texture2D
 	sticker_button.expand_icon = true
@@ -1162,17 +1298,17 @@ func _build_doodle_panel(root: Control) -> void:
 		size_slider.min_value = 32 if enabled else 2
 		size_slider.value = _sticker_width if enabled else _doodle.radius * 2.0
 		size_slider.set_block_signals(false)
-		size_label.text = ("贴纸 %d" if enabled else "笔宽 %d") % int(size_slider.value)
+		size_label.text = (tr("贴纸 %d") if enabled else tr("笔宽 %d")) % int(size_slider.value)
 		color_picker.disabled = enabled or _doodle.erasing
 	)
 	size_slider.value_changed.connect(func(value: float):
 		if _sticker_enabled:
 			_sticker_width = int(value)
 			_sticker_preview_dirty = _sticker_pending
-			size_label.text = "贴纸 %d" % int(value)
+			size_label.text = tr("贴纸 %d") % int(value)
 			return
 		_doodle.radius = value * 0.5
-		size_label.text = ("擦宽 %d" if _doodle.erasing else "笔宽 %d") % int(value)
+		size_label.text = (tr("擦宽 %d") if _doodle.erasing else tr("笔宽 %d")) % int(value)
 	)
 	color_picker.color_changed.connect(func(value: Color):
 		_doodle.color = value
@@ -1182,12 +1318,12 @@ func _build_doodle_panel(root: Control) -> void:
 			sticker_button.button_pressed = false
 		_doodle.erasing = enabled
 		size_slider.value = _doodle.radius * 2.0
-		size_label.text = ("擦宽 %d" if enabled else "笔宽 %d") % int(size_slider.value)
+		size_label.text = (tr("擦宽 %d") if enabled else tr("笔宽 %d")) % int(size_slider.value)
 		color_picker.disabled = enabled or _sticker_enabled
 	)
 	var clear_button := Button.new()
 	clear_button.name = "ClearDoodleButton"
-	clear_button.text = "清空"
+	clear_button.text = tr("清空")
 	clear_button.custom_minimum_size.y = 48
 	clear_button.add_theme_font_override("font", _cjk_font)
 	clear_button.pressed.connect(func():
@@ -1208,7 +1344,8 @@ func _build_doodle_panel(root: Control) -> void:
 	_sticker_edit_tools.offset_top = -220
 	_sticker_edit_tools.offset_bottom = -36
 	_sticker_edit_tools.hide()
-	var help := _make_label("拖动贴纸位置 · 左侧调大小", 20, Color("#735d46"))
+	var help := _make_label(tr("拖动贴纸位置 · 左侧调大小"), 20, Color("#735d46"))
+	help.name = "StickerHelpLabel"
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_sticker_edit_tools.add_child(help)
 	var rotation := HSlider.new()
@@ -1221,13 +1358,13 @@ func _build_doodle_panel(root: Control) -> void:
 	rotation.value_changed.connect(func(value: float):
 		_sticker_angle = deg_to_rad(value)
 		_sticker_preview_dirty = _sticker_pending
-		help.text = "旋转 %d° · 拖动位置 · 左侧调大小" % int(value)
+		help.text = tr("旋转 %d° · 拖动位置 · 左侧调大小") % int(value)
 	)
 	_sticker_edit_tools.add_child(rotation)
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 8)
 	_sticker_edit_tools.add_child(actions)
-	for entry in [["确认", "ConfirmStickerButton", _confirm_sticker], ["取消", "CancelStickerButton", _cancel_sticker], ["撤销", "UndoStickerButton", _undo_sticker], ["编辑", "EditStickerButton", _edit_last_sticker]]:
+	for entry in [[tr("确认"), "ConfirmStickerButton", _confirm_sticker], [tr("取消"), "CancelStickerButton", _cancel_sticker], [tr("撤销"), "UndoStickerButton", _undo_sticker], [tr("编辑"), "EditStickerButton", _edit_last_sticker]]:
 		var action := Button.new()
 		action.text = entry[0]
 		action.name = entry[1]
@@ -1263,14 +1400,14 @@ func _build_doodle_panel(root: Control) -> void:
 	zoom_box.add_child(magnifier)
 	var mode := Button.new()
 	mode.name = "DoodleViewModeButton"
-	mode.text = "缩放"
+	mode.text = tr("缩放")
 	mode.toggle_mode = true
 	mode.custom_minimum_size.y = 52
 	mode.add_theme_font_override("font", _cjk_font)
 	mode.add_theme_font_size_override("font_size", 20)
-	mode.tooltip_text = "切换缩放 / 俯视角度"
+	mode.tooltip_text = tr("切换缩放 / 俯视角度")
 	zoom_box.add_child(mode)
-	var upper_label := _make_label("放大 +", 18, Color("#735d46"))
+	var upper_label := _make_label(tr("放大 +"), 18, Color("#735d46"))
 	zoom_box.add_child(upper_label)
 	zoom_box.add_child(zoom_label)
 	var zoom := VSlider.new()
@@ -1284,7 +1421,7 @@ func _build_doodle_panel(root: Control) -> void:
 	zoom.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_style_doodle_slider(zoom, true)
 	zoom_box.add_child(zoom)
-	var lower_label := _make_label("缩小 −", 18, Color("#735d46"))
+	var lower_label := _make_label(tr("缩小 −"), 18, Color("#735d46"))
 	zoom_box.add_child(lower_label)
 	zoom.value_changed.connect(func(value: float):
 		if _doodle_angle_mode:
@@ -1297,9 +1434,9 @@ func _build_doodle_panel(root: Control) -> void:
 	)
 	mode.toggled.connect(func(angle_mode: bool):
 		_doodle_angle_mode = angle_mode
-		mode.text = "视角" if angle_mode else "缩放"
-		upper_label.text = "俯视" if angle_mode else "放大 +"
-		lower_label.text = "平视" if angle_mode else "缩小 −"
+		mode.text = tr("视角") if angle_mode else tr("缩放")
+		upper_label.text = tr("俯视") if angle_mode else tr("放大 +")
+		lower_label.text = tr("平视") if angle_mode else tr("缩小 −")
 		zoom.set_block_signals(true)
 		zoom.min_value = 0.0 if angle_mode else 0.6
 		zoom.max_value = 90.0 if angle_mode else 2.0
@@ -1312,7 +1449,7 @@ func _build_doodle_panel(root: Control) -> void:
 	var eye := Button.new()
 	eye.name = "DoodleVisibilityButton"
 	eye.toggle_mode = true
-	eye.tooltip_text = "淡化 / 恢复涂鸦工具栏"
+	eye.tooltip_text = tr("淡化 / 恢复涂鸦工具栏")
 	_doodle_panel.add_child(eye)
 	eye.anchor_left = 1
 	eye.anchor_right = 1
@@ -1414,7 +1551,7 @@ func _build_modal(root: Control, title: String, close: Callable) -> Control:
 	header.add_child(heading)
 	var close_button := Button.new()
 	close_button.name = "CloseModalButton"
-	close_button.text = "关闭 ×"
+	close_button.text = tr("关闭 ×")
 	close_button.custom_minimum_size = Vector2(112, 56)
 	close_button.add_theme_font_override("font", _cjk_font)
 	close_button.add_theme_font_size_override("font_size", 20)
