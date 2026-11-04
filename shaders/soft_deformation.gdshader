@@ -11,6 +11,7 @@ uniform bool has_normal_texture = false;
 uniform float normal_strength = 1.0;
 uniform float material_roughness = 0.6;
 uniform float material_metallic = 0.0;
+uniform float material_specular : hint_range(0.0, 1.0) = 0.5;
 uniform float dent_shadow_strength : hint_range(0.0, 0.8) = 0.225;
 varying float dent_shadow;
 uniform vec3 model_center;
@@ -327,4 +328,5 @@ void fragment() {
 	}
 	ROUGHNESS = material_roughness;
 	METALLIC = material_metallic;
+	SPECULAR = material_specular;
 }

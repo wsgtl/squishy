@@ -132,6 +132,7 @@ var _stretch_recovering := false
 var _rebound_axis := Vector3.RIGHT
 var _source_arrays: Array = []
 var _source_material: Material
+var material_profile: Dictionary = {}
 var _normal_sign := -1.0
 var _pull_offset := Vector3.ZERO
 
@@ -1029,6 +1030,7 @@ func _setup_gpu() -> void:
 		_shader_material.set_shader_parameter("base_color", source.albedo_color)
 		_shader_material.set_shader_parameter("material_roughness", source.roughness)
 		_shader_material.set_shader_parameter("material_metallic", source.metallic)
+		_shader_material.set_shader_parameter("material_specular", source.metallic_specular)
 		if source.normal_enabled and source.normal_texture != null:
 			_shader_material.set_shader_parameter("normal_texture", source.normal_texture)
 			_shader_material.set_shader_parameter("has_normal_texture", true)
@@ -1036,6 +1038,10 @@ func _setup_gpu() -> void:
 		if source.albedo_texture != null:
 			_shader_material.set_shader_parameter("albedo_texture", source.albedo_texture)
 			_shader_material.set_shader_parameter("has_albedo_texture", true)
+	# Apply only supported surface settings to this instance, never the GLB resource.
+	for parameter in ["material_roughness", "material_specular", "normal_strength"]:
+		if material_profile.has(parameter):
+			_shader_material.set_shader_parameter(parameter, clampf(float(material_profile[parameter]), 0.0, 1.0))
 	instance.material_override = _shader_material
 	# Shader displacement is invisible to the engine's static bounds.
 	instance.custom_aabb = AABB(_model_center - Vector3.ONE * _model_radius * 6.0, Vector3.ONE * _model_radius * 12.0)

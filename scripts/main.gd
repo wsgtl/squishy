@@ -486,8 +486,8 @@ func _build_environment() -> void:
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color("#f8c5cc")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("#fff1e4")
-	environment.ambient_light_energy = 0.32
+	environment.ambient_light_color = Color("#ffffff")
+	environment.ambient_light_energy = 0.24
 	world_environment.environment = environment
 	add_child(world_environment)
 
@@ -503,29 +503,20 @@ func _build_environment() -> void:
 	var key_light := DirectionalLight3D.new()
 	key_light.name = "WarmKeyLight"
 	key_light.rotation_degrees = Vector3(-52.0, -142.0, 0.0)
-	key_light.light_color = Color("#fff4e8")
-	key_light.light_energy = 0.6 #主光线
+	key_light.light_color = Color("#fff9f2")
+	key_light.light_energy = 0.42
 	key_light.shadow_enabled = true
 	key_light.shadow_opacity = 0.55
 	add_child(key_light)
 
-	# 补光 - 减少阴影
+	# Neutral frontal fill keeps the face readable without another shadow map.
 	var fill_light := DirectionalLight3D.new()
 	fill_light.name = "FillLight"
-	fill_light.rotation_degrees = Vector3(-30.0, 45.0, 0.0)
-	fill_light.light_color = Color("#fff5e6")
+	fill_light.rotation_degrees = Vector3(-25.0, 25.0, 0.0)
+	fill_light.light_color = Color("#ffffff")
 	fill_light.light_energy = 0.12
 	fill_light.shadow_enabled = false
 	add_child(fill_light)
-
-	# Broad shadow-free frontal fill lifts the face without another cast shadow.
-	var front_light := DirectionalLight3D.new()
-	front_light.name = "FrontLight"
-	front_light.rotation_degrees = Vector3(-22.0, 0.0, 0.0)
-	front_light.light_color = Color("#ffffff")
-	front_light.light_energy = 0.1  #补光
-	front_light.shadow_enabled = false
-	add_child(front_light)
 
 func _build_stage() -> void:
 	# Large ground carries the pink studio backdrop and analytic contact shadow.
@@ -641,6 +632,7 @@ func _build_blob() -> void:
 			_blob.name = "SoftBlob"
 			_blob.position = instance.position
 			_blob.set_external_mesh(mesh_instance)
+			_blob.material_profile = ModelProfiles.material_for(_active_model_path)
 			add_child(_blob)
 			return
 	
