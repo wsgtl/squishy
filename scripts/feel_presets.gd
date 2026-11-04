@@ -9,6 +9,12 @@ const TYPES := [
  {"name":"绵密黄油感", "description":"紧实弹韧、按压时会舒适下陷（冰黄油）", "products":"木棉豆腐（老豆腐）", "soft":2, "bounce":2},
 ]
 
+# One product per feel; update these paths when new product assets arrive.
+const MODELS := ["res://glb/宝石.glb", "res://glb/sfl.glb", "res://glb/df.glb", "res://glb/tofu.glb"]
+
+static func model_path(index: int) -> String:
+ return MODELS[clampi(index, 0, MODELS.size() - 1)]
+
 static func parameters(index: int) -> Dictionary:
  var type: Dictionary = TYPES[clampi(index, 0, TYPES.size()-1)]
  var soft: float = type.soft / 5.0

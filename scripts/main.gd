@@ -1,11 +1,13 @@
 extends Node3D
 
 const MODEL_PATH := "res://glb/sfl.glb"
+const ModelProfiles = preload("res://scripts/model_profiles.gd")
 const MODEL_WIDTH := 2.0
 const SceneCapture = preload("res://scripts/scene_capture.gd")
 var _scene_capture: CanvasLayer
 const FeelPresets = preload("res://scripts/feel_presets.gd")
-const HomeScreen = preload("res://scripts/home_screen.gd")
+const HomeScreen = preload("res://scenes/home.tscn")
+var _active_model_path: String = FeelPresets.model_path(0)
 var _home_active := true
 var _selected_feel := 0
 var _hud_root: Control
@@ -80,12 +82,14 @@ var _last_mouse_pos := Vector2.ZERO
 
 # 参数面板
 var _param_panel: Control
-var _param_button: Button
 var _param_visible := false
 
 # 镜头后退程度 (0-1.5, 默认1)
 var _camera_retract: float = 1.0
 const GAME_VIEW_SCALE := 1.2
+const HOME_VIEW_UP_RATIO := 0.09
+const GAME_VIEW_UP_RATIO := 0.12
+var _page_start_v_offset := 0.0
 var _home_camera_dist: float = 4.5
 var _base_camera_dist: float = 4.5
 var _base_camera_y: float = 2.8
@@ -107,7 +111,7 @@ func _ready() -> void:
 	_blob.set_doodle_texture(_doodle.texture)
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	_home = HomeScreen.new()
+	_home = HomeScreen.instantiate()
 	layer.add_child(_home)
 	_home.setup(self, _cjk_font)
 	_hud_root.hide()
@@ -117,6 +121,7 @@ func _refresh_language() -> void:
 	_load_font()
 	LocaleManager.refresh_controls(self, _cjk_font)
 	_home.refresh_language()
+	_hud_root.refresh_language()
 	var size_slider := find_child("DoodleSizeSlider", true, false) as VSlider
 	var size_label := find_child("DoodleSizeLabel", true, false) as Label
 	size_label.text = tr("贴纸 %d") % int(size_slider.value) if _sticker_enabled else (tr("擦宽 %d") if _doodle.erasing else tr("笔宽 %d")) % int(size_slider.value)
@@ -132,6 +137,9 @@ func _apply_feel(index: int) -> void:
 	_finish_gesture()
 	_blob.cancel_grip()
 	_blob.reset_deformation()
+	var next_model := FeelPresets.model_path(_selected_feel)
+	if next_model != _active_model_path:
+		_switch_model(next_model)
 	var parameters := FeelPresets.parameters(_selected_feel)
 	for key in parameters:
 		_blob.set(key, parameters[key])
@@ -156,6 +164,8 @@ func _return_home() -> void:
 	_update_camera_position()
 	_hud_root.hide()
 	_home.show()
+	_home.get_node("SoundButton").set_pressed_no_signal(not AudioServer.is_bus_mute(0))
+	_home.refresh_language()
 
 func _start_game() -> void:
 	_finish_gesture()
@@ -167,6 +177,7 @@ func _start_game() -> void:
 
 func _set_page_camera(animated := false) -> void:
 	_page_camera_start_transform = _camera.transform
+	_page_start_v_offset = _camera.v_offset
 	_page_restoring_pose = animated and (_home_active or _page_restoring_pose)
 	_page_model_start = _model_root.quaternion
 	# Always derive from the original home distance; repeated page changes do
@@ -187,7 +198,7 @@ func _set_page_camera(animated := false) -> void:
 	_update_camera_position()
 
 func _load_font() -> void:
-	_cjk_font = load(LocaleManager.font_path())
+	_cjk_font = LocaleManager.ui_font()
 	if _cjk_font == null:
 		_cjk_font = FontFile.new()
 		_cjk_font.font_path = LocaleManager.font_path()
@@ -388,6 +399,12 @@ func _physics_process(delta: float) -> void:
 func _update_camera_position() -> void:
 	if _camera == null:
 		return
+	# Shift the home framing upward without lifting the product off its base.
+	var home_offset := -_home_camera_dist * tan(deg_to_rad(_camera.fov * 0.5)) * 2.0 * HOME_VIEW_UP_RATIO
+	var game_offset := -_base_camera_dist * tan(deg_to_rad(_camera.fov * 0.5)) * 2.0 * GAME_VIEW_UP_RATIO
+	var desired_offset := home_offset if _home_active else game_offset
+	var page_blend := smoothstep(0.0, 1.0, _page_camera_elapsed / PAGE_CAMERA_DURATION)
+	_camera.v_offset = lerpf(_page_start_v_offset, desired_offset, page_blend)
 	var x := _camera_current_dist * cos(_camera_polar) * cos(_camera_azimuth)
 	var z := _camera_current_dist * cos(_camera_polar) * sin(_camera_azimuth)
 	var y := _camera_current_y
@@ -576,8 +593,26 @@ func _calculate_screen_width_at_y(y: float) -> float:
 	# 竖屏时水平视野更窄
 	return dist * tan(half_fov_rad) * 2.0 * aspect
 
+func _switch_model(path: String) -> void:
+	# Detach the previous collider before attaching a new model.
+	remove_child(_blob)
+	_blob.queue_free()
+	_blob = null
+	remove_child(_model_root)
+	_model_root.queue_free()
+	_active_model_path = path
+	_build_blob()
+	_default_model_rotation = _model_root.quaternion
+	_page_restoring_pose = false
+	_set_page_camera()
+	_doodle.clear()
+	_doodle.reset_history()
+	_sticker_last.clear()
+	_sticker_undo = null
+	_blob.set_doodle_texture(_doodle.texture)
+
 func _build_blob() -> void:
-	var glb_scene := load(MODEL_PATH)
+	var glb_scene := load(_active_model_path)
 	if glb_scene != null:
 		var instance = glb_scene.instantiate()
 		add_child(instance)
@@ -585,6 +620,7 @@ func _build_blob() -> void:
 		var imported_mesh := _find_first_mesh_instance(instance)
 		if imported_mesh != null:
 			_bake_model_transform(imported_mesh)
+		instance.rotation_degrees += ModelProfiles.rotation_degrees_for(_active_model_path)
 		var original_bounds := _get_model_aabb(instance)
 		var model_scale := MODEL_WIDTH / maxf(original_bounds.size.x, maxf(original_bounds.size.y, original_bounds.size.z))
 		instance.scale = Vector3.ONE * model_scale
@@ -712,31 +748,15 @@ func _auto_focus_camera(model_root: Node) -> void:
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	var root := Control.new()
+	var root := preload("res://scenes/game.tscn").instantiate() as Control
 	_hud_root = root
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(root)
 
-	_param_button = Button.new()
-	_param_button.text = tr("参数")
-	_param_button.position = Vector2(24.0, 24.0)
-	_param_button.custom_minimum_size = Vector2(160.0, 80.0)
-	_param_button.add_theme_font_size_override("font_size", 24)
-	_param_button.add_theme_font_override("font", _cjk_font)
-	_param_button.pressed.connect(_toggle_param_panel)
-	_param_button.mouse_filter = Control.MOUSE_FILTER_STOP
-	root.add_child(_param_button)
 	_build_doodle_panel(root)
-	var home_button := Button.new()
-	home_button.name = "ReturnHomeButton"
-	home_button.text = tr("首页")
-	home_button.position = Vector2(452, 24)
-	home_button.custom_minimum_size = Vector2(110, 80)
-	home_button.add_theme_font_override("font", _cjk_font)
-	home_button.add_theme_font_size_override("font_size",24)
-	home_button.pressed.connect(_return_home)
-	root.add_child(home_button)
+	root.get_node("Edit").setup(self)
+	root.setup(self)
 
 	_param_panel = _build_modal(root, tr("参数设置"), _close_param_panel)
 	_param_panel.name = "ParameterModal"
@@ -750,7 +770,6 @@ func _build_hud() -> void:
 	press_feel_switch.name = "RaisedRimPressSwitch"
 	press_feel_switch.text = tr("按压收拢与翘边")
 	press_feel_switch.button_pressed = _blob.raised_rim_press
-	press_feel_switch.add_theme_font_override("font", _cjk_font)
 	press_feel_switch.add_theme_font_size_override("font_size", 26)
 	press_feel_switch.tooltip_text = tr("开启：四周向按压点收拢、侧缘圆弧翘起；关闭：原版按压手感")
 	press_feel_switch.toggled.connect(func(enabled: bool):
@@ -917,18 +936,7 @@ func _build_hud() -> void:
 	vibration_row.add_child(vibration_slider)
 	_feel_sliders["rebound_vibration"] = vibration_slider
 
-	_grip_button = Button.new()
-	_grip_button.name = "GripButton"
-	_grip_button.text = tr("按住挤压")
-	root.add_child(_grip_button)
-	_grip_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_grip_button.offset_left = -250
-	_grip_button.offset_right = -10
-	_grip_button.offset_top = -150
-	_grip_button.offset_bottom = -62
-	_grip_button.add_theme_font_override("font", _cjk_font)
-	_grip_button.add_theme_font_size_override("font_size", 28)
-	_grip_button.focus_mode = Control.FOCUS_NONE
+	_grip_button = root.get_node("GripButton")
 	_grip_button.button_down.connect(func():
 		if not _home_active and not _doodle_enabled and not _blob.is_gripping():
 			_finish_gesture()
@@ -939,18 +947,7 @@ func _build_hud() -> void:
 		if not _blob._twist_mode:
 			_blob.set_grip_held(false)
 	)
-	_twist_button = Button.new()
-	_twist_button.name = "TwistButton"
-	_twist_button.text = tr("按住扭转")
-	root.add_child(_twist_button)
-	_twist_button.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	_twist_button.offset_left = 10
-	_twist_button.offset_right = 250
-	_twist_button.offset_top = -150
-	_twist_button.offset_bottom = -62
-	_twist_button.add_theme_font_override("font", _cjk_font)
-	_twist_button.add_theme_font_size_override("font_size", 28)
-	_twist_button.focus_mode = Control.FOCUS_NONE
+	_twist_button = root.get_node("TwistButton")
 	_twist_button.button_down.connect(func():
 		if not _home_active and not _doodle_enabled and not _blob.is_gripping():
 			_finish_gesture()
@@ -966,6 +963,7 @@ func _build_hud() -> void:
 	var footer := Label.new()
 	footer.name = "InteractionHint"
 	footer.text = tr("单指 / 左键按压 · 双指 / Shift 拉伸")
+	footer.hide()
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	footer.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	footer.offset_left = 0.0
@@ -975,7 +973,6 @@ func _build_hud() -> void:
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	footer.add_theme_font_size_override("font_size", 13)
 	footer.add_theme_color_override("font_color", Color("#735d46"))
-	footer.add_theme_font_override("font", _cjk_font)
 	root.add_child(footer)
 	_scene_capture = SceneCapture.new()
 	add_child(_scene_capture)
@@ -1001,7 +998,6 @@ func _make_label(text: String, size: int, color: Color) -> Label:
 	label.text = text
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
-	label.add_theme_font_override("font", _cjk_font)
 	return label
 
 func _on_recovery_changed(value: float) -> void:
@@ -1060,6 +1056,8 @@ func _process(delta: float) -> void:
 		_update_camera_position()
 
 func _begin_drawing(point: Vector2, touch_id: int) -> bool:
+	if _over_doodle_controls(point):
+		return false
 	var hit := _raycast_blob(point, true)
 	if hit.is_empty():
 		return false
@@ -1114,8 +1112,9 @@ func _confirm_sticker() -> void:
 	if not _sticker_pending:
 		return
 	_refresh_sticker_preview()
+	_doodle.record_change(_sticker_cancel_image)
 	_sticker_undo = _sticker_base
-	_sticker_last = {"uv": _sticker_uv, "width": _sticker_width, "angle": _sticker_angle}
+	_sticker_last = {"uv": _sticker_uv, "width": _sticker_width, "angle": _sticker_angle, "image": _sticker_image}
 	_sticker_base = null
 	_sticker_cancel_image = null
 	_sticker_pending = false
@@ -1146,6 +1145,7 @@ func _edit_last_sticker() -> void:
 	_sticker_uv = _sticker_last.uv
 	_sticker_width = _sticker_last.width
 	_sticker_angle = _sticker_last.angle
+	_sticker_image = _sticker_last.image
 	_sticker_pending = true
 	_sticker_preview_dirty = true
 	var size_slider := find_child("DoodleSizeSlider", true, false) as VSlider
@@ -1154,6 +1154,8 @@ func _edit_last_sticker() -> void:
 	rotation.value = rad_to_deg(_sticker_angle)
 
 func _set_doodle_enabled(enabled: bool) -> void:
+	if _doodle_enabled == enabled:
+		return
 	if not enabled:
 		_cancel_sticker()
 	_finish_gesture()
@@ -1180,16 +1182,24 @@ func _set_doodle_enabled(enabled: bool) -> void:
 		_camera_returning = true
 		var eye := find_child("DoodleVisibilityButton", true, false) as Button
 		eye.button_pressed = false
-	_doodle_panel.visible = enabled
+	_doodle_panel.visible = false
+	_hud_root.get_node("Edit").visible = enabled
+	_hud_root.get_node("Edit/Confirm").hide()
 	_update_camera_position()
 	var hint := find_child("InteractionHint", true, false) as Label
 	if hint != null:
 		hint.text = tr("在模型上绘制 · 拖动空白处旋转") if enabled else tr("单指 / 左键按压 · 双指 / Shift 拉伸")
-	_doodle_button.text = tr("退出涂鸦") if enabled else tr("涂鸦")
+	_hud_root.refresh_language()
 	if enabled:
 		_doodle_panel.move_to_front()
 
 func _over_doodle_controls(point: Vector2) -> bool:
+	if _hud_root.get_node("Edit").covers(point):
+		return true
+	for name in ["SquishModeButton", "DoodleButton", "ReturnHomeButton", "SceneCaptureButton"]:
+		var button = _hud_root.get_node_or_null(name)
+		if button != null and button.is_visible_in_tree() and button.get_global_rect().has_point(point):
+			return true
 	if not _doodle_panel.visible:
 		return false
 	for child in _doodle_panel.get_children():
@@ -1198,15 +1208,7 @@ func _over_doodle_controls(point: Vector2) -> bool:
 	return false
 
 func _build_doodle_panel(root: Control) -> void:
-	_doodle_button = Button.new()
-	_doodle_button.name = "DoodleButton"
-	_doodle_button.text = tr("涂鸦")
-	_doodle_button.position = Vector2(208, 24)
-	_doodle_button.custom_minimum_size = Vector2(220, 80)
-	_doodle_button.add_theme_font_size_override("font_size", 24)
-	_doodle_button.add_theme_font_override("font", _cjk_font)
-	_doodle_button.pressed.connect(func(): _set_doodle_enabled(not _doodle_enabled))
-	root.add_child(_doodle_button)
+	_doodle_button = root.get_node("DoodleButton")
 	_doodle_panel = Control.new()
 	_doodle_panel.name = "DoodleTools"
 	root.add_child(_doodle_panel)
@@ -1228,7 +1230,6 @@ func _build_doodle_panel(root: Control) -> void:
 	eraser.name = "DoodleEraserSwitch"
 	eraser.text = tr("橡皮擦")
 	eraser.custom_minimum_size = Vector2(140, 72)
-	eraser.add_theme_font_override("font", _cjk_font)
 	eraser.add_theme_font_size_override("font_size", 20)
 	for state in ["checked", "unchecked"]:
 		var image := _parameter_control_icon(true, state == "checked").get_image()
@@ -1280,7 +1281,6 @@ func _build_doodle_panel(root: Control) -> void:
 	sticker_button.icon = load("res://res/common/pic/p_1.png") as Texture2D
 	sticker_button.expand_icon = true
 	sticker_button.add_theme_constant_override("icon_max_width", 48)
-	sticker_button.add_theme_font_override("font", _cjk_font)
 	sticker_button.custom_minimum_size = Vector2(80, 64)
 	color_tools.add_child(sticker_button)
 	sticker_button.toggled.connect(func(enabled: bool):
@@ -1325,7 +1325,6 @@ func _build_doodle_panel(root: Control) -> void:
 	clear_button.name = "ClearDoodleButton"
 	clear_button.text = tr("清空")
 	clear_button.custom_minimum_size.y = 48
-	clear_button.add_theme_font_override("font", _cjk_font)
 	clear_button.pressed.connect(func():
 		_cancel_sticker()
 		_sticker_undo = null
@@ -1369,7 +1368,6 @@ func _build_doodle_panel(root: Control) -> void:
 		action.text = entry[0]
 		action.name = entry[1]
 		_sticker_actions[entry[1]] = action
-		action.add_theme_font_override("font", _cjk_font)
 		action.custom_minimum_size = Vector2(96, 56)
 		action.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		action.pressed.connect(entry[2])
@@ -1403,7 +1401,6 @@ func _build_doodle_panel(root: Control) -> void:
 	mode.text = tr("缩放")
 	mode.toggle_mode = true
 	mode.custom_minimum_size.y = 52
-	mode.add_theme_font_override("font", _cjk_font)
 	mode.add_theme_font_size_override("font_size", 20)
 	mode.tooltip_text = tr("切换缩放 / 俯视角度")
 	zoom_box.add_child(mode)
@@ -1553,7 +1550,6 @@ func _build_modal(root: Control, title: String, close: Callable) -> Control:
 	close_button.name = "CloseModalButton"
 	close_button.text = tr("关闭 ×")
 	close_button.custom_minimum_size = Vector2(112, 56)
-	close_button.add_theme_font_override("font", _cjk_font)
 	close_button.add_theme_font_size_override("font_size", 20)
 	close_button.pressed.connect(close)
 	header.add_child(close_button)
@@ -1645,7 +1641,7 @@ func _configure_doodle_color_picker(button: ColorPickerButton) -> void:
 	picker.presets_visible = false
 	picker.sliders_visible = true
 	var theme := Theme.new()
-	theme.default_font = _cjk_font
+	theme.default_font = LocaleManager.ui_font()
 	theme.default_font_size = 22
 	picker.theme = theme
 	picker.add_theme_constant_override("h_width", 36)

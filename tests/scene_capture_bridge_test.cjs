@@ -19,6 +19,7 @@ function setup({canShare=false,error=null,secure=true}={}){
   assert.equal(target.searchParams.get('url'),'https://game.punikko.fun/games/squishy/');
   if(platform==='X')assert.equal(target.searchParams.get('text'),'私のスクイーズ記念写真 #punikko');
  }
+ for(const platform of ['Instagram','TikTok','Kakao']){s=setup({canShare:true});await s.photo.share(platform);assert.equal(s.calls.shares,1);assert.equal(s.calls.opened.length,0);}
  s=setup({canShare:true});await s.photo.share('系统分享');assert.equal(s.calls.shares,1);assert.equal(s.calls.files[0].type,'image/jpeg');assert.equal(s.calls.opened.length,0);
  s=setup({canShare:true,error:'AbortError'});await s.photo.share('系统分享');assert.equal(s.photo.takeMessage(),'');assert.equal(s.calls.downloads,0);
  for(const options of [{},{canShare:true,secure:false},{canShare:true,error:'NotAllowedError'}]){

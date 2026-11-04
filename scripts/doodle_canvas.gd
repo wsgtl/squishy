@@ -18,15 +18,24 @@ var image: Image
 var texture: ImageTexture
 var dirty := false
 var _stroke_active := false
+var _stroke_before: Image
+var undo_steps: Array[PackedByteArray] = []
+var redo_steps: Array[PackedByteArray] = []
+const HISTORY_BYTES := 32 * 1024 * 1024
+const HISTORY_LIMIT := 20
 # Remember only touched texels, not a second full-size texture per stroke.
 var _stroke_base: Dictionary = {}
 var _stroke_coverage: Dictionary = {}
 
 func begin_stroke() -> void:
 	end_stroke()
+	_stroke_before = image.duplicate()
 	_stroke_active = true
 
 func end_stroke() -> void:
+	if _stroke_active and _stroke_before != null:
+		record_change(_stroke_before)
+	_stroke_before = null
 	_stroke_active = false
 	_stroke_base.clear()
 	_stroke_coverage.clear()
@@ -38,7 +47,9 @@ func _init() -> void:
 
 func clear() -> void:
 	end_stroke()
+	var before := image.duplicate() as Image
 	image.fill(Color.TRANSPARENT)
+	record_change(before)
 	dirty = true
 
 func stamp(uv: Vector2) -> void:
@@ -100,3 +111,37 @@ func flush() -> void:
 	if dirty:
 		texture.update(image)
 		dirty = false
+
+# Lossless bounded snapshots, committed once per stroke/action, never per frame.
+func record_change(before: Image) -> void:
+	if before == null or before.get_data() == image.get_data():
+		return
+	undo_steps.append(before.get_data().compress(FileAccess.COMPRESSION_FASTLZ))
+	redo_steps.clear()
+	var total := 0
+	for step in undo_steps:
+		total += step.size()
+	while undo_steps.size() > HISTORY_LIMIT or total > HISTORY_BYTES:
+		total -= undo_steps.pop_front().size()
+
+func undo() -> void:
+	end_stroke()
+	if undo_steps.is_empty():
+		return
+	redo_steps.append(image.get_data().compress(FileAccess.COMPRESSION_FASTLZ))
+	_restore(undo_steps.pop_back())
+
+func redo() -> void:
+	end_stroke()
+	if redo_steps.is_empty():
+		return
+	undo_steps.append(image.get_data().compress(FileAccess.COMPRESSION_FASTLZ))
+	_restore(redo_steps.pop_back())
+
+func _restore(data: PackedByteArray) -> void:
+	image = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RGBA8, data.decompress(SIZE * SIZE * 4, FileAccess.COMPRESSION_FASTLZ))
+	dirty = true
+
+func reset_history() -> void:
+	undo_steps.clear()
+	redo_steps.clear()

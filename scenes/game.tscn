@@ -1,0 +1,338 @@
+[gd_scene format=3 uid="uid://cf28yobk1mevw"]
+
+[ext_resource type="PackedScene" path="res://scenes/edit.tscn" id="edit"]
+
+[ext_resource type="Theme" path="res://resources/ui_theme.tres" id="ui_theme"]
+
+[ext_resource type="Script" uid="uid://co6q8skxdnotk" path="res://scripts/button_press_animation.gd" id="anim"]
+[ext_resource type="Texture2D" uid="uid://c1v6a0vvopf6b" path="res://res/ui/game/btn_back.png" id="back"]
+[ext_resource type="Texture2D" uid="uid://d0l0q7a27w3dg" path="res://res/ui/game/ic_back.png" id="back_icon"]
+[ext_resource type="Texture2D" uid="uid://bwakbvvajfb44" path="res://res/ui/game/switch_draw_0.png" id="d0"]
+[ext_resource type="Texture2D" uid="uid://byig2flhv48ws" path="res://res/ui/game/feel_name.png" id="feel"]
+[ext_resource type="Texture2D" uid="uid://dw46tlekch8uu" path="res://res/ui/game/btn_nie_green_1.png" id="green"]
+[ext_resource type="Texture2D" uid="uid://cv3fj7yxao564" path="res://res/ui/game/btn_photo.png" id="photo"]
+[ext_resource type="Texture2D" uid="uid://dfnbeq746va8j" path="res://res/ui/game/ic_photo.png" id="photo_icon"]
+[ext_resource type="Texture2D" uid="uid://cdvuydly1kno7" path="res://res/ui/game/btn_nie_pink_1.png" id="pink"]
+[ext_resource type="Texture2D" uid="uid://bs4yu5phhjicl" path="res://res/ui/game/switch_squish_1.png" id="s1"]
+[ext_resource type="Script" uid="uid://cff4wlq82jxkj" path="res://scripts/game_screen.gd" id="script"]
+[ext_resource type="Texture2D" uid="uid://b72bbad6fwyb2" path="res://res/ui/home/volume_on.png" id="sound"]
+[ext_resource type="Texture2D" uid="uid://cnkyd2qe61w0e" path="res://res/ui/game/switch_bg.png" id="switch"]
+[ext_resource type="Texture2D" uid="uid://ddolq8fbxvvxn" path="res://res/ui/home/btn_volume.png" id="volume"]
+
+[sub_resource type="StyleBoxEmpty" id="empty"]
+
+[node name="GameScreen" type="Control" unique_id=2120501677]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("ui_theme")
+script = ExtResource("script")
+
+[node name="ReturnHomeButton" type="Button" parent="." unique_id=1457971608]
+layout_mode = 0
+anchor_left = 0.05
+anchor_top = 0.04
+anchor_right = 0.05
+anchor_bottom = 0.04
+offset_right = 70.0
+offset_bottom = 70.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="ReturnHomeButton" unique_id=1509039917]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("back")
+expand_mode = 1
+
+[node name="PressAnimation" type="Node" parent="ReturnHomeButton" unique_id=1256652795]
+script = ExtResource("anim")
+
+[node name="Icon" type="TextureRect" parent="ReturnHomeButton" unique_id=815375324]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 17.0
+offset_right = 46.0
+offset_bottom = 53.0
+mouse_filter = 2
+texture = ExtResource("back_icon")
+expand_mode = 1
+
+[node name="FeelBadge" type="TextureRect" parent="." unique_id=846006178]
+layout_mode = 0
+anchor_left = 0.18
+anchor_top = 0.04
+anchor_right = 0.18
+anchor_bottom = 0.04
+offset_right = 218.0
+offset_bottom = 70.0
+mouse_filter = 2
+texture = ExtResource("feel")
+expand_mode = 1
+
+[node name="FeelName" type="Label" parent="." unique_id=415105563]
+layout_mode = 0
+anchor_left = 0.18
+anchor_top = 0.04
+anchor_right = 0.18
+anchor_bottom = 0.04
+offset_right = 218.0
+offset_bottom = 70.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "水润嫩滑"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SoundButton" type="Button" parent="." unique_id=478836506]
+layout_mode = 0
+anchor_left = 0.67
+anchor_top = 0.04
+anchor_right = 0.67
+anchor_bottom = 0.04
+offset_right = 206.0
+offset_bottom = 74.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="SoundButton" unique_id=1150546366]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("volume")
+expand_mode = 1
+
+[node name="Caption" type="Label" parent="SoundButton" unique_id=1248662525]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "有声音"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PressAnimation" type="Node" parent="SoundButton" unique_id=1136871233]
+script = ExtResource("anim")
+
+[node name="Icon" type="TextureRect" parent="SoundButton" unique_id=476088093]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 24.0
+offset_right = 48.0
+offset_bottom = 52.0
+mouse_filter = 2
+texture = ExtResource("sound")
+expand_mode = 1
+
+[node name="SceneCaptureButton" type="Button" parent="." unique_id=1356775864]
+layout_mode = 0
+anchor_left = 0.025
+anchor_top = 0.59
+anchor_right = 0.025
+anchor_bottom = 0.59
+offset_right = 96.0
+offset_bottom = 96.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="SceneCaptureButton" unique_id=768548922]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("photo")
+expand_mode = 1
+
+[node name="PressAnimation" type="Node" parent="SceneCaptureButton" unique_id=422795140]
+script = ExtResource("anim")
+
+[node name="Icon" type="TextureRect" parent="SceneCaptureButton" unique_id=1764476219]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 72.0
+offset_bottom = 72.0
+mouse_filter = 2
+texture = ExtResource("photo_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="GripButton" type="Button" parent="." unique_id=1221529148]
+layout_mode = 0
+anchor_left = 0.14
+anchor_top = 0.69
+anchor_right = 0.14
+anchor_bottom = 0.69
+offset_right = 250.0
+offset_bottom = 86.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="GripButton" unique_id=1171797410]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("pink")
+expand_mode = 1
+
+[node name="Caption" type="Label" parent="GripButton" unique_id=1859667603]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "挤压"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TwistButton" type="Button" parent="." unique_id=532527323]
+layout_mode = 0
+anchor_left = 0.53
+anchor_top = 0.69
+anchor_right = 0.53
+anchor_bottom = 0.69
+offset_right = 250.0
+offset_bottom = 86.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="TwistButton" unique_id=353484155]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("green")
+expand_mode = 1
+
+[node name="Caption" type="Label" parent="TwistButton" unique_id=1584626827]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "扭转"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ModeBackground" type="TextureRect" parent="." unique_id=1211722179]
+layout_mode = 0
+anchor_left = 0.16
+anchor_top = 0.88
+anchor_right = 0.16
+anchor_bottom = 0.88
+offset_right = 490.0
+offset_bottom = 108.0
+mouse_filter = 2
+texture = ExtResource("switch")
+expand_mode = 1
+
+[node name="SquishModeButton" type="Button" parent="." unique_id=793743279]
+layout_mode = 0
+anchor_left = 0.2
+anchor_top = 0.897
+anchor_right = 0.2
+anchor_bottom = 0.897
+offset_right = 205.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="SquishModeButton" unique_id=1729615283]
+layout_mode = 1
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 74.0
+offset_bottom = 60.0
+mouse_filter = 2
+texture = ExtResource("s1")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Caption" type="Label" parent="SquishModeButton" unique_id=1147316496]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 6.0
+offset_right = 205.0
+offset_bottom = 60.0
+theme_override_font_sizes/font_size = 28
+text = "捏捏"
+vertical_alignment = 1
+
+[node name="DoodleButton" type="Button" parent="." unique_id=2048543550]
+layout_mode = 0
+anchor_left = 0.52
+anchor_top = 0.897
+anchor_right = 0.52
+anchor_bottom = 0.897
+offset_right = 205.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="DoodleButton" unique_id=623045986]
+layout_mode = 1
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 74.0
+offset_bottom = 60.0
+mouse_filter = 2
+texture = ExtResource("d0")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Caption" type="Label" parent="DoodleButton" unique_id=426531917]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 6.0
+offset_right = 205.0
+offset_bottom = 60.0
+theme_override_font_sizes/font_size = 28
+text = "涂鸦"
+vertical_alignment = 1
+
+[node name="Divider" type="ColorRect" parent="." unique_id=1905060711]
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.902
+anchor_right = 0.5
+anchor_bottom = 0.944
+offset_right = 1.0
+mouse_filter = 2
+color = Color(0.9, 0.72, 0.76, 1)
+
+[node name="Edit" parent="." instance=ExtResource("edit")]
+visible = false

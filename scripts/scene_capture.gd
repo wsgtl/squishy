@@ -19,80 +19,25 @@ const GAME_URL := "https://game.punikko.fun/games/squishy/"
 func setup(scene: Node3D, hud: Control, font: Font) -> void:
 	host = scene
 	layer = 100
-	var trigger := Button.new()
-	trigger.name = "SceneCaptureButton"
-	trigger.text = tr("拍照")
-	hud.add_child(trigger)
-	trigger.anchor_left = 1.0
-	trigger.anchor_right = 1.0
-	trigger.offset_left = -160
-	trigger.offset_right = -24
-	trigger.offset_top = 120
-	trigger.offset_bottom = 188
-	trigger.add_theme_font_override("font", font)
-	trigger.add_theme_font_size_override("font_size", 24)
+	var trigger := hud.get_node("SceneCaptureButton") as Button
 	trigger.pressed.connect(capture_scene)
-	overlay = Control.new()
-	overlay.name = "SceneCaptureModal"
+	overlay = preload("res://scenes/photo.tscn").instantiate()
 	add_child(overlay)
-	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	overlay.hide()
-	var shade := ColorRect.new()
-	shade.color = Color(0.08, 0.05, 0.07, 0.6)
-	overlay.add_child(shade)
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var card := PanelContainer.new()
-	overlay.add_child(card)
-	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	card.anchor_left = 0.07
-	card.anchor_right = 0.93
-	card.anchor_top = 0.06
-	card.anchor_bottom = 0.94
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#e1e5c9")
-	style.set_corner_radius_all(28)
-	style.set_content_margin_all(24)
-	card.add_theme_stylebox_override("panel", style)
-	var theme := Theme.new()
-	theme.default_font = font
-	theme.default_font_size = 24
-	card.theme = theme
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
-	card.add_child(box)
-	var title := Label.new()
-	title.text = tr("捏捏纪念照")
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_color", Color("#493c37"))
-	box.add_child(title)
-	preview = TextureRect.new()
-	preview.name = "SceneCapturePreview"
-	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	preview.custom_minimum_size.y = 120
-	box.add_child(preview)
-	status = Label.new()
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status.add_theme_font_size_override("font_size", 18)
-	status.add_theme_color_override("font_color", Color("#67544c"))
-	box.add_child(status)
-	save_button = _button(tr("保存"), save_image)
-	save_button.name = "SaveSceneCaptureButton"
-	box.add_child(save_button)
-	var share := HBoxContainer.new()
-	share.add_theme_constant_override("separation", 12)
-	box.add_child(share)
-	for platform in ["X", "LINE", "system"]:
-		var button := _button(tr("系统分享") if platform == "system" else platform, func(): share_image(platform))
-		button.name = "SystemShareButton" if platform == "system" else platform + "ShareButton"
-		button.tooltip_text = tr("分享当前 JPEG 图片") if platform == "system" else tr("在 %s 分享文字和游戏链接") % platform
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 22)
-		share.add_child(button)
-	var cancel := _button(tr("取消"), close)
-	cancel.name = "CloseSceneCaptureButton"
-	box.add_child(cancel)
+	preview = overlay.get_node("Card/PreviewFrame/SceneCapturePreview")
+	status = overlay.get_node("Card/Status")
+	save_button = overlay.get_node("Card/SaveSceneCaptureButton")
+	save_button.get_node("Caption").text = tr("保存")
+	save_button.pressed.connect(save_image)
+	actions.append(save_button)
+	for platform in ["X", "LINE", "Instagram", "TikTok", "Kakao"]:
+		var button: Button = overlay.get_node("Card/ShareFrame/ShareScroll/Platforms/" + platform + "ShareButton")
+		button.pressed.connect(func(): share_image(platform))
+		button.tooltip_text = tr("在 %s 分享文字和游戏链接") % platform if platform in ["X", "LINE"] else tr("通过系统分享选择 %s；若未显示，请保存图片后上传。") % platform
+		actions.append(button)
+	var cancel: Button = overlay.get_node("Card/CloseSceneCaptureButton")
+	cancel.get_node("Caption").text = tr("取消")
+	cancel.pressed.connect(close)
+	actions.append(cancel)
 	dialog = FileDialog.new()
 	dialog.name = "SaveSceneCaptureDialog"
 	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
@@ -102,14 +47,6 @@ func setup(scene: Node3D, hud: Control, font: Font) -> void:
 	dialog.file_selected.connect(_save_to_path)
 	add_child(dialog)
 
-func _button(text: String, callback: Callable) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size.y = 62
-	button.pressed.connect(callback)
-	actions.append(button)
-	return button
-
 func is_open() -> bool:
 	return overlay != null and overlay.visible
 
@@ -117,6 +54,20 @@ static func capture_size(physical_size: Vector2i) -> Vector2i:
 	var size := Vector2(maxi(physical_size.x, 1), maxi(physical_size.y, 1))
 	size *= minf(1.0, float(MAX_EDGE) / maxf(size.x, size.y))
 	return Vector2i(maxi(roundi(size.x), 1), maxi(roundi(size.y), 1))
+
+# Match the authored preview opening by cropping, never stretching the image.
+static func crop_center(source: Image, opening: Vector2) -> Image:
+	if opening.x <= 0.0 or opening.y <= 0.0:
+		return source
+	var source_size := source.get_size()
+	var ratio := opening.x / opening.y
+	var crop := source_size
+	if float(source_size.x) / source_size.y > ratio:
+		crop.x = maxi(1, roundi(source_size.y * ratio))
+	else:
+		crop.y = maxi(1, roundi(source_size.x / ratio))
+	var origin := (source_size - crop) / 2
+	return source.get_region(Rect2i(origin, crop))
 
 func _physical_size() -> Vector2i:
 	if OS.has_feature("web"):
@@ -155,6 +106,7 @@ func capture_scene() -> void:
 	captured = viewport.get_texture().get_image()
 	viewport.queue_free()
 	if captured != null and not captured.is_empty():
+		captured = crop_center(captured, preview.size)
 		captured.convert(Image.FORMAT_RGB8)
 		jpeg = captured.save_jpg_to_buffer(0.93)
 		filename = "punikko-" + Time.get_datetime_string_from_system().replace(":", "-") + ".jpg"
@@ -162,14 +114,14 @@ func capture_scene() -> void:
 		var scale := minf(1.0, 960.0 / maxf(thumbnail.get_width(), thumbnail.get_height()))
 		thumbnail.resize(maxi(1, roundi(thumbnail.get_width() * scale)), maxi(1, roundi(thumbnail.get_height() * scale)), Image.INTERPOLATE_LANCZOS)
 		preview.texture = ImageTexture.create_from_image(thumbnail)
-		status.text = tr("%d × %d · JPEG · 仅模型与场景") % [captured.get_width(), captured.get_height()]
+		status.text = ""
 		if OS.has_feature("web"):
 			_prepare_web_image()
 	else:
 		status.text = tr("图片生成失败，请关闭后重试。")
 	busy = false
 	for button in actions:
-		button.disabled = jpeg.is_empty() and button.text != tr("取消")
+		button.disabled = jpeg.is_empty() and button.name != "CloseSceneCaptureButton"
 
 func close() -> void:
 	if busy:

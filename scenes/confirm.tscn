@@ -1,0 +1,127 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://resources/ui_theme.tres" id="ui_theme"]
+
+[ext_resource type="Script" path="res://scripts/confirm_dialog.gd" id="script"]
+
+
+[ext_resource type="Texture2D" path="res://res/ui/dialog/dialog_common_panel.png" id="a0"]
+
+[ext_resource type="Texture2D" path="res://res/ui/dialog/dialog_confirm_button_normal.png" id="a1"]
+
+[ext_resource type="Texture2D" path="res://res/ui/dialog/dialog_cancel_button_normal.png" id="a2"]
+
+[sub_resource type="StyleBoxEmpty" id="empty"]
+
+[node name="ConfirmDialog" type="Control"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+visible = false
+mouse_filter = 0
+script = ExtResource("script")
+theme = ExtResource("ui_theme")
+
+[node name="Shade" type="ColorRect" parent="."]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0,0,0,0.18)
+mouse_filter = 0
+
+[node name="Card" type="Control" parent="."]
+layout_mode = 0
+anchor_left = 0.1
+anchor_right = 0.9
+anchor_top = 0.30
+anchor_bottom = 0.56
+mouse_filter = 0
+
+[node name="Panel" type="NinePatchRect" parent="Card"]
+layout_mode = 1
+anchor_right = 2.0
+anchor_bottom = 2.0
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("a0")
+patch_margin_left = 56
+patch_margin_top = 56
+patch_margin_right = 56
+patch_margin_bottom = 56
+mouse_filter = 2
+
+[node name="Message" type="Label" parent="Card"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 0.6
+mouse_filter = 2
+text = "清除全部涂鸦和贴纸？"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Confirm" type="Button" parent="Card"]
+layout_mode = 1
+anchor_left = 0.08
+anchor_right = 0.46
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -110.0
+offset_bottom = -42.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Card/Confirm"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a1")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Card/Confirm"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+mouse_filter = 2
+text = "确认"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Cancel" type="Button" parent="Card"]
+layout_mode = 1
+anchor_left = 0.54
+anchor_right = 0.92
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -110.0
+offset_bottom = -42.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Card/Cancel"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a2")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Card/Cancel"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+mouse_filter = 2
+text = "取消"
+horizontal_alignment = 1
+vertical_alignment = 1

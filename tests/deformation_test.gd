@@ -838,7 +838,7 @@ func check_modals() -> void:
 	await screenshot("doodle-toolbar-dimmed")
 	eye.button_pressed = false
 	check(mode.mouse_filter != Control.MOUSE_FILTER_IGNORE and zoom.editable, "Eye button restores slider interaction")
-	var card := main.find_child("LeftDoodleToolbar", true, false) as Control
+	var card := main._hud_root.get_node("Edit/Tools") as Control
 	mouse_button(card.get_global_rect().position + Vector2(5, 5), true)
 	await process_frame
 	check(not main._drawing and not main._dragging and not main._is_rotating, "Toolbar background blocks model gestures")
@@ -892,56 +892,36 @@ func check_touch_ui() -> void:
 	main._set_doodle_enabled(true)
 	await process_frame
 	await process_frame
-	var slider := main.find_child("DoodleSizeSlider", true, false) as VSlider
-	var rect := slider.get_global_rect()
-	var start := Vector2(rect.get_center().x, rect.position.y + rect.size.y * 0.7)
-	var finish := Vector2(start.x, rect.position.y + rect.size.y * 0.25)
-	touch_event_at(start, true)
+	var edit = main._hud_root.get_node("Edit")
+	edit.select_tool(0)
+	var point: Vector2 = edit.get_node("Tools/Sizes/Size2").get_global_rect().get_center()
+	touch_event_at(point, true)
 	await process_frame
-	var previous := slider.value
-	touch_drag_to(finish, finish - start)
+	touch_event_at(point, false)
 	await process_frame
-	touch_event_at(finish, false)
+	check(main._doodle.radius == 24 and not main._drawing and not main._dragging, "Real touch selects brush size without painting")
+	point = edit.get_node("Tools/Colors/Color3").get_global_rect().get_center()
+	touch_event_at(point, true)
 	await process_frame
-	check(slider.value > previous + 5 and not main._drawing and not main._dragging, "Real touch drags the brush slider without painting or pressing")
-	slider.value = 10
-	var button := main.find_child("DoodleColorPicker", true, false) as ColorPickerButton
-	var center := button.get_global_rect().get_center()
-	touch_event_at(center, true)
+	touch_event_at(point, false)
 	await process_frame
-	touch_event_at(center, false)
+	check(main._doodle.color.is_equal_approx(Color(edit.COLORS[3])), "Real touch selects a palette color")
+	edit.select_tool(2)
+	point = edit.get_node("Tools/Clear").get_global_rect().get_center()
+	touch_event_at(point, true)
 	await process_frame
+	touch_event_at(point, false)
 	await process_frame
-	check(button.get_popup().visible, "Real touch opens the color picker")
-	var picker := button.get_picker()
-	var nodes: Array[Node] = [picker]
-	var channel: HSlider
-	while not nodes.is_empty():
-		var node: Node = nodes.pop_back()
-		if node is HSlider and node.is_visible_in_tree():
-			channel = node
-			break
-		nodes.append_array(node.get_children(true))
-	check(channel != null, "Color picker exposes a visible RGBA slider for input verification")
-	if channel != null:
-		var before := channel.value
-		var channel_rect := channel.get_global_rect()
-		var local_point := Vector2(channel_rect.position.x + channel_rect.size.x * 0.35, channel_rect.get_center().y)
-		# Embedded popup controls belong to their own viewport.
-		var event := InputEventMouseButton.new()
-		event.device = InputEvent.DEVICE_ID_EMULATION
-		event.position = local_point
-		event.button_index = MOUSE_BUTTON_LEFT
-		event.pressed = true
-		button.get_popup().push_input(event)
-		event = event.duplicate()
-		event.pressed = false
-		button.get_popup().push_input(event)
-		await process_frame
-		check(channel.value != before, "Color picker channel responds to touch-emulated mouse input")
-	button.get_popup().hide()
-	button.color = Color.BLACK
-	button.color_changed.emit(Color.BLACK)
+	check(edit.get_node("Confirm").visible and not main._drawing, "Touch opens clear confirmation without drawing")
+	point = edit.get_node("Confirm/Card/Cancel").get_global_rect().get_center()
+	touch_event_at(point, true)
+	await process_frame
+	touch_event_at(point, false)
+	await process_frame
+	check(not edit.get_node("Confirm").visible, "Touch cancels clear confirmation")
+	edit.select_tool(0)
+	main._doodle.radius = 5
+	main._doodle.color = Color.BLACK
 	main._set_doodle_enabled(false)
 	main._process(main.CAMERA_RETURN_DURATION)
 
@@ -1158,7 +1138,8 @@ func check_feel_grip() -> void:
 		var settle_times: Array[float] = []
 		var rebounds: Array[float] = []
 		for feel in range(4):
-			main._home.select(feel)
+			for key in main.FeelPresets.parameters(feel):
+				blob.set(key, main.FeelPresets.parameters(feel)[key])
 			blob.set_grip_axis(main._camera.global_basis.x)
 			if twist:
 				blob.begin_twist()
@@ -1185,7 +1166,9 @@ func check_feel_grip() -> void:
 		check(displacements[0] > displacements[2] and displacements[2] > displacements[3], "Softer feels produce larger actual grip/twist deformation: " + str(twist))
 		check(settle_times[2] < settle_times[0] and settle_times[0] < settle_times[1], "Elastic feel recovers fastest, mud recovers slower: " + str(twist))
 		check(rebounds[2] > rebounds[0] and rebounds[0] > rebounds[1], "Higher elasticity produces stronger release oscillation: " + str(twist))
-	main._home.select(0)
+	main._home.select(1)
+	blob = main._blob
+	blob.set_physics_process(false)
 
 func check_home_screen() -> void:
 	check(main._home_active and main._home.visible and not main._hud_root.visible, "Launch shows home and hides interaction HUD")
@@ -1198,6 +1181,8 @@ func check_home_screen() -> void:
 	check(not main._dragging and not main._drawing and not main._is_rotating and max_offset() < 0.00001, "Home blocks press stretch drawing and rotation")
 	for i in range(4):
 		main._home.select(i)
+		blob = main._blob
+		blob.set_physics_process(false)
 		var parameters: Dictionary = main.FeelPresets.parameters(i)
 		var matches := true
 		for key in parameters:
@@ -1208,8 +1193,13 @@ func check_home_screen() -> void:
 		check(selected_count == 1, "Home keeps exactly one selected feel: " + str(i))
 		check(matches, "Feel preset applies all softness and rebound parameters: " + str(i))
 	check(main.FeelPresets.parameters(2).recovery_time < main.FeelPresets.parameters(1).recovery_time, "More elastic preset restores faster")
+	main._home.select(1)
+	blob = main._blob
+	blob.set_physics_process(false)
 	check_feel_grip()
-	main._home.select(0)
+	main._home.select(1)
+	blob = main._blob
+	blob.set_physics_process(false)
 	await screenshot("home")
 	var start: Button = main._home.find_child("StartSquishingButton", true, false)
 	var home_distance: float = main._camera.position.distance_to(main._look_at_target)

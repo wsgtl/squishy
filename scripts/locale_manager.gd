@@ -3,8 +3,7 @@ extends Node
 signal language_changed
 
 const JAPANESE: Dictionary = preload("res://locales/ja.json").data
-const FONT_ZH = preload("res://fonts/NotoSansSC-Regular.ttf")
-const FONT_JA = preload("res://fonts/NotoSansJP-Regular.ttf")
+const UI_THEME = preload("res://resources/ui_theme.tres")
 const SETTINGS_PATH := "user://language.cfg"
 const OPTIONS := ["zh", "ja"]
 var preference := "zh"
@@ -25,7 +24,7 @@ func _enter_tree() -> void:
 	system_language = resolve_locale(system_locale)
 	preference = system_language
 	var settings := ConfigFile.new()
-	if settings.load(SETTINGS_PATH) == OK:
+	if language_selection_allowed() and settings.load(SETTINGS_PATH) == OK:
 		var saved := str(settings.get_value("language", "selection", "auto"))
 		if saved in OPTIONS:
 			preference = saved
@@ -34,6 +33,8 @@ func _enter_tree() -> void:
 func set_language(selection: String, persist := true) -> void:
 	if selection not in OPTIONS:
 		return
+	if not language_selection_allowed():
+		selection = "ja"
 	preference = selection
 	if persist:
 		var settings := ConfigFile.new()
@@ -42,12 +43,11 @@ func set_language(selection: String, persist := true) -> void:
 	TranslationServer.set_locale(preference)
 	language_changed.emit()
 
-func make_selector(font: Font) -> OptionButton:
+func make_selector(_font: Font) -> OptionButton:
 	var button := OptionButton.new()
 	button.name = "LanguageSelector"
-	button.add_theme_font_override("font", font)
+	button.visible = language_selection_allowed()
 	button.add_theme_font_size_override("font_size", 24)
-	button.get_popup().add_theme_font_override("font", font)
 	button.get_popup().add_theme_font_size_override("font_size", 24)
 	button.custom_minimum_size = Vector2(210, 64)
 	button.add_item("中文")
@@ -56,7 +56,7 @@ func make_selector(font: Font) -> OptionButton:
 	button.item_selected.connect(func(index: int): set_language(OPTIONS[index]))
 	return button
 
-func refresh_controls(root: Node, font: Font) -> void:
+func refresh_controls(root: Node, _font: Font) -> void:
 	# Translate existing controls in place so drawing, camera and tuning survive.
 	var reverse := {}
 	for source in JAPANESE:
@@ -68,21 +68,25 @@ func refresh_controls(root: Node, font: Font) -> void:
 			var source: String = reverse.get(node.text, node.text)
 			node.text = tr(source)
 		if node is OptionButton and node.name == "LanguageSelector":
+			node.visible = language_selection_allowed()
 			node.select(OPTIONS.find(preference))
-			node.get_popup().add_theme_font_override("font", font)
 		if node is Control:
 			node.tooltip_text = tr(reverse.get(node.tooltip_text, node.tooltip_text))
-			if node.has_theme_font_override("font"):
-				node.add_theme_font_override("font", font)
 			if node.theme != null:
 				if node.theme.default_font is FontVariation:
-					node.theme.default_font.base_font = font
+					node.theme.default_font.base_font = ui_font()
 				else:
-					node.theme.default_font = font
+					node.theme.default_font = ui_font()
 		nodes.append_array(node.get_children(true))
 
 func resolve_locale(system_locale: String) -> String:
-	return "ja" if system_locale.replace("-", "_").to_lower().get_slice("_", 0) == "ja" else "zh"
+	return "zh" if system_locale.replace("-", "_").to_lower().get_slice("_", 0) == "zh" else "ja"
+
+func language_selection_allowed() -> bool:
+	return system_language == "zh"
+
+func ui_font() -> Font:
+	return UI_THEME.default_font
 
 func font_path() -> String:
-	return "res://fonts/NotoSansJP-Regular.ttf" if TranslationServer.get_locale().begins_with("ja") else "res://fonts/NotoSansSC-Regular.ttf"
+	return UI_THEME.default_font.resource_path

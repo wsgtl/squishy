@@ -1,0 +1,2186 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/confirm.tscn" id="confirm"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/editor_sticker_selection_frame.png" id="sticker_frame"]
+
+[ext_resource type="Theme" path="res://resources/ui_theme.tres" id="ui_theme"]
+
+[ext_resource type="Script" path="res://scripts/edit_screen.gd" id="script"]
+
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/editor_undo_icon.png" id="a0"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/editor_redo_icon.png" id="a1"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/edit_bg.png" id="a2"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/tool_switch_button_unselected.png" id="a3"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/tool_brush_0.png" id="a4"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/tool_sticker_0.png" id="a5"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/tool_eraser_0.png" id="a6"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/editor_brush_size_selection_frame.png" id="a7"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/brush_size.png" id="a8"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_01_red.png" id="a9"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/editor_color_selection_ring.png" id="a10"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_02_yellow.png" id="a11"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_03_green.png" id="a12"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_04_blue.png" id="a13"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_05_purple.png" id="a14"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_06_brown.png" id="a15"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_07_white.png" id="a16"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/color_08_tone.png" id="a17"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/editor_delete_button_panel.png" id="a18"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/editor_delete_icon.png" id="a19"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/01_sticker_cream_swirl_group_pink.png" id="a20"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/02_sticker_cream_swirl_group_blue.png" id="a21"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/03_sticker_cream_swirl_group_cream.png" id="a22"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/04_sticker_cream_swirl_group_chocolate.png" id="a23"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/05_sticker_cream_flower_pink.png" id="a24"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/06_sticker_cream_flower_blue.png" id="a25"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/07_sticker_cream_flower_cream.png" id="a26"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/08_sticker_cream_flower_chocolate.png" id="a27"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/09_sticker_cream_drop_pink.png" id="a28"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/10_sticker_cream_drop_blue.png" id="a29"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/11_sticker_cream_drop_cream.png" id="a30"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/12_sticker_cream_drop_chocolate.png" id="a31"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/13_sticker_dripping_icing_pink.png" id="a32"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/14_sticker_dripping_icing_blue.png" id="a33"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/15_sticker_dripping_icing_cream.png" id="a34"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/16_sticker_syrup_wave_pink.png" id="a35"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/17_sticker_syrup_wave_blue.png" id="a36"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/18_sticker_syrup_wave_cream.png" id="a37"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/19_sticker_syrup_wave_chocolate.png" id="a38"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/20_sticker_cherry.png" id="a39"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/21_sticker_strawberry.png" id="a40"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/22_sticker_strawberry_slice.png" id="a41"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/23_sticker_blueberry.png" id="a42"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/24_sticker_raspberry.png" id="a43"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/25_sticker_blackberry.png" id="a44"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/26_sticker_orange_wedge.png" id="a45"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/27_sticker_lemon_slice.png" id="a46"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/28_sticker_kiwi_slice.png" id="a47"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/29_sticker_peach_slice.png" id="a48"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/30_sticker_sprinkle_pink_01.png" id="a49"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/31_sticker_sprinkle_yellow_01.png" id="a50"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/32_sticker_sprinkle_blue_01.png" id="a51"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/33_sticker_sprinkle_cream_01.png" id="a52"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/34_sticker_sprinkle_yellow_02.png" id="a53"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/35_sticker_sprinkle_blue_02.png" id="a54"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/36_sticker_sprinkle_cream_02.png" id="a55"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/37_sticker_sprinkle_yellow_03.png" id="a56"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/38_sticker_sprinkle_pink_02.png" id="a57"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/39_sticker_candy_pearl_pearl_white.png" id="a58"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/40_sticker_candy_pearl_pink.png" id="a59"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/41_sticker_candy_pearl_blue.png" id="a60"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/42_sticker_candy_pearl_yellow.png" id="a61"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/43_sticker_star_candy_yellow.png" id="a62"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/44_sticker_star_candy_pink.png" id="a63"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/45_sticker_star_candy_blue.png" id="a64"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/46_sticker_star_candy_cream.png" id="a65"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/47_sticker_heart_candy_chocolate.png" id="a66"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/48_sticker_heart_candy_cream.png" id="a67"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/49_sticker_wafer_roll_chocolate.png" id="a68"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/50_sticker_wafer_roll_pink.png" id="a69"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/51_sticker_chocolate_bar.png" id="a70"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/52_sticker_bow_pink.png" id="a71"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/53_sticker_bow_blue.png" id="a72"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/54_sticker_bow_cream.png" id="a73"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/55_sticker_bow_chocolate.png" id="a74"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/56_sticker_cat_ears_pink_white.png" id="a75"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/57_sticker_cat_ears_blue_white.png" id="a76"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/58_sticker_cat_ears_chocolate.png" id="a77"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/stickers/59_sticker_scalloped_label.png" id="a78"]
+
+[ext_resource type="Texture2D" path="res://res/ui/edit/tool_switch_button_selected.png" id="sticker_apply"]
+[ext_resource type="Texture2D" path="res://res/ui/edit/sticker_slider_knob.svg" id="sticker_knob"]
+
+[sub_resource type="StyleBoxFlat" id="sticker_track"]
+bg_color = Color(0.98, 0.78, 0.83, 1)
+content_margin_top = 8.0
+content_margin_bottom = 8.0
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+
+[sub_resource type="StyleBoxEmpty" id="empty"]
+
+[node name="EditScreen" type="Control"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("script")
+theme = ExtResource("ui_theme")
+
+[node name="Undo" type="Button" parent="."]
+layout_mode = 0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -270.0
+offset_top = 45.0
+offset_right = -170.0
+offset_bottom = 119.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Undo"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a0")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Redo" type="Button" parent="."]
+layout_mode = 0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -145.0
+offset_top = 45.0
+offset_right = -45.0
+offset_bottom = 119.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Redo"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a1")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Tools" type="Control" parent="."]
+layout_mode = 0
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_top = 0.865
+anchor_bottom = 0.865
+offset_left = -342.0
+offset_right = 342.0
+offset_top = -308.0
+mouse_filter = 0
+
+[node name="Panel" type="NinePatchRect" parent="Tools"]
+layout_mode = 1
+anchor_right = 2.0
+anchor_bottom = 2.0
+texture = ExtResource("a2")
+mouse_filter = 2
+scale = Vector2(0.5, 0.5)
+patch_margin_left = 100
+patch_margin_top = 100
+patch_margin_right = 100
+patch_margin_bottom = 100
+
+[node name="Brush" type="Button" parent="Tools"]
+layout_mode = 0
+offset_left = 25.0
+offset_top = 22.0
+offset_right = 230.0
+offset_bottom = 84.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="NinePatchRect" parent="Tools/Brush"]
+layout_mode = 1
+anchor_right = 2.0
+anchor_bottom = 2.0
+texture = ExtResource("a3")
+mouse_filter = 2
+scale = Vector2(0.5, 0.5)
+patch_margin_left = 56
+patch_margin_top = 56
+patch_margin_right = 56
+patch_margin_bottom = 56
+
+[node name="Icon" type="TextureRect" parent="Tools/Brush"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 65.0
+offset_bottom = 54.0
+texture = ExtResource("a4")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Tools/Brush"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 62.0
+mouse_filter = 2
+text = "涂鸦"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Sticker" type="Button" parent="Tools"]
+layout_mode = 0
+offset_left = 238.0
+offset_top = 22.0
+offset_right = 443.0
+offset_bottom = 84.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="NinePatchRect" parent="Tools/Sticker"]
+layout_mode = 1
+anchor_right = 2.0
+anchor_bottom = 2.0
+texture = ExtResource("a3")
+mouse_filter = 2
+scale = Vector2(0.5, 0.5)
+patch_margin_left = 56
+patch_margin_top = 56
+patch_margin_right = 56
+patch_margin_bottom = 56
+
+[node name="Icon" type="TextureRect" parent="Tools/Sticker"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 65.0
+offset_bottom = 54.0
+texture = ExtResource("a5")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Tools/Sticker"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 62.0
+mouse_filter = 2
+text = "贴纸"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Eraser" type="Button" parent="Tools"]
+layout_mode = 0
+offset_left = 451.0
+offset_top = 22.0
+offset_right = 656.0
+offset_bottom = 84.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="NinePatchRect" parent="Tools/Eraser"]
+layout_mode = 1
+anchor_right = 2.0
+anchor_bottom = 2.0
+texture = ExtResource("a3")
+mouse_filter = 2
+scale = Vector2(0.5, 0.5)
+patch_margin_left = 56
+patch_margin_top = 56
+patch_margin_right = 56
+patch_margin_bottom = 56
+
+[node name="Icon" type="TextureRect" parent="Tools/Eraser"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 65.0
+offset_bottom = 54.0
+texture = ExtResource("a6")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Tools/Eraser"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 62.0
+mouse_filter = 2
+text = "橡皮擦"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Sizes" type="Control" parent="Tools"]
+layout_mode = 0
+offset_left = 35.0
+offset_top = 104.0
+offset_right = 650.0
+offset_bottom = 168.0
+mouse_filter = 2
+
+[node name="Size0" type="Button" parent="Tools/Sizes"]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 0.0
+offset_right = 240.0
+offset_bottom = 62.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Sizes/Size0"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a7")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Dot" type="TextureRect" parent="Tools/Sizes/Size0"]
+layout_mode = 0
+offset_left = 33.0
+offset_right = 55.0
+offset_top = 20.0
+offset_bottom = 42.0
+texture = ExtResource("a8")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Size1" type="Button" parent="Tools/Sizes"]
+layout_mode = 0
+offset_left = 270.0
+offset_top = 0.0
+offset_right = 410.0
+offset_bottom = 62.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Sizes/Size1"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a7")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Dot" type="TextureRect" parent="Tools/Sizes/Size1"]
+layout_mode = 0
+offset_left = 27.0
+offset_right = 61.0
+offset_top = 14.0
+offset_bottom = 48.0
+texture = ExtResource("a8")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Size2" type="Button" parent="Tools/Sizes"]
+layout_mode = 0
+offset_left = 440.0
+offset_top = 0.0
+offset_right = 580.0
+offset_bottom = 62.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Sizes/Size2"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a7")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Dot" type="TextureRect" parent="Tools/Sizes/Size2"]
+layout_mode = 0
+offset_left = 20.0
+offset_right = 68.0
+offset_top = 7.0
+offset_bottom = 55.0
+texture = ExtResource("a8")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Colors" type="Control" parent="Tools"]
+layout_mode = 0
+offset_left = 22.0
+offset_top = 190.0
+offset_right = 665.0
+offset_bottom = 254.0
+mouse_filter = 2
+
+[node name="Color0" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 64.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color0"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a9")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color0"]
+visible = true
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color0/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Color1" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 0.0
+offset_right = 144.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color1"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a11")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color1"]
+visible = false
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color1/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Color2" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 160.0
+offset_top = 0.0
+offset_right = 224.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color2"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a12")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color2"]
+visible = false
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color2/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Color3" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 240.0
+offset_top = 0.0
+offset_right = 304.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color3"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a13")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color3"]
+visible = false
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color3/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Color4" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 320.0
+offset_top = 0.0
+offset_right = 384.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color4"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a14")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color4"]
+visible = false
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color4/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Color5" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 400.0
+offset_top = 0.0
+offset_right = 464.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color5"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a15")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color5"]
+visible = false
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color5/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Color6" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 480.0
+offset_top = 0.0
+offset_right = 544.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color6"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a16")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color6"]
+visible = false
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color6/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Color7" type="Button" parent="Tools/Colors"]
+layout_mode = 0
+offset_left = 560.0
+offset_top = 0.0
+offset_right = 624.0
+offset_bottom = 64.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="TextureRect" parent="Tools/Colors/Color7"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a17")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Ring" type="TextureRect" parent="Tools/Colors/Color7"]
+visible = false
+self_modulate = Color(1, 0.65, 0.70, 1)
+layout_mode = 1
+offset_left = -6.0
+offset_top = -6.0
+offset_right = 6.0
+offset_bottom = 6.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color7/Ring"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+top_level = false
+texture = ExtResource("a10")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Clear" type="Button" parent="Tools"]
+visible = false
+layout_mode = 0
+offset_left = 30.0
+offset_top = 190.0
+offset_right = 650.0
+offset_bottom = 252.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="NinePatchRect" parent="Tools/Clear"]
+layout_mode = 1
+anchor_right = 2.0
+anchor_bottom = 2.0
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("a18")
+patch_margin_left = 60
+patch_margin_top = 60
+patch_margin_right = 60
+patch_margin_bottom = 60
+mouse_filter = 2
+
+[node name="Icon" type="TextureRect" parent="Tools/Clear"]
+layout_mode = 0
+offset_left = 28.0
+offset_top = 8.0
+offset_right = 76.0
+offset_bottom = 54.0
+texture = ExtResource("a19")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Tools/Clear"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+mouse_filter = 2
+text = "清除"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Stickers" type="ScrollContainer" parent="Tools"]
+visible = false
+layout_mode = 0
+offset_left = 25.0
+offset_top = 96.0
+offset_right = 660.0
+offset_bottom = 265.0
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 3
+
+[node name="Grid" type="GridContainer" parent="Tools/Stickers"]
+layout_mode = 2
+columns = 6
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="Sticker0" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a20")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker1" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a21")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker2" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a22")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker3" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a23")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker4" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a24")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker5" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a25")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker6" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a26")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker7" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a27")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker8" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a28")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker9" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a29")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker10" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a30")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker11" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a31")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker12" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a32")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker13" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a33")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker14" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a34")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker15" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a35")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker16" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a36")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker17" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a37")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker18" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a38")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker19" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a39")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker20" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a40")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker21" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a41")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker22" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a42")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker23" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a43")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker24" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a44")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker25" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a45")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker26" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a46")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker27" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a47")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker28" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a48")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker29" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a49")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker30" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a50")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker31" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a51")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker32" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a52")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker33" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a53")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker34" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a54")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker35" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a55")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker36" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a56")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker37" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a57")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker38" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a58")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker39" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a59")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker40" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a60")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker41" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a61")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker42" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a62")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker43" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a63")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker44" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a64")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker45" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a65")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker46" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a66")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker47" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a67")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker48" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a68")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker49" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a69")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker50" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a70")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker51" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a71")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker52" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a72")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker53" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a73")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker54" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a74")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker55" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a75")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker56" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a76")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker57" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a77")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="Sticker58" type="TextureButton" parent="Tools/Stickers/Grid"]
+custom_minimum_size = Vector2(96,70)
+layout_mode = 2
+texture_normal = ExtResource("a78")
+ignore_texture_size = true
+stretch_mode = 5
+mouse_filter = 1
+
+[node name="StickerActions" type="Control" parent="."]
+layout_mode = 1
+anchor_left = 0.17
+anchor_right = 0.95
+anchor_top = 0.865
+anchor_bottom = 0.865
+offset_top = -420.0
+offset_bottom = -320.0
+visible = false
+mouse_filter = 0
+
+[node name="Apply" type="Button" parent="StickerActions"]
+layout_mode = 1
+anchor_top = 0.36
+anchor_bottom = 0.94
+anchor_right = 0.18
+focus_mode = 0
+text = "确认"
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.65, 0.30, 0.38, 1)
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="Background" type="NinePatchRect" parent="StickerActions/Apply"]
+layout_mode = 1
+anchor_right = 2.0
+anchor_bottom = 2.0
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("sticker_apply")
+patch_margin_left = 56
+patch_margin_top = 56
+patch_margin_right = 56
+patch_margin_bottom = 56
+show_behind_parent = true
+mouse_filter = 2
+
+[node name="SizeLabel" type="Label" parent="StickerActions"]
+layout_mode = 1
+anchor_left = 0.23
+anchor_right = 0.59
+anchor_bottom = 0.32
+text = "缩放"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.70, 0.35, 0.43, 1)
+mouse_filter = 2
+
+[node name="Size" type="HSlider" parent="StickerActions"]
+layout_mode = 1
+anchor_left = 0.23
+anchor_right = 0.59
+anchor_top = 0.32
+anchor_bottom = 1.0
+min_value = 32.0
+max_value = 384.0
+value = 220.0
+theme_override_styles/slider = SubResource("sticker_track")
+theme_override_styles/grabber_area = SubResource("sticker_track")
+theme_override_styles/grabber_area_highlight = SubResource("sticker_track")
+theme_override_icons/grabber = ExtResource("sticker_knob")
+theme_override_icons/grabber_highlight = ExtResource("sticker_knob")
+
+[node name="RotationLabel" type="Label" parent="StickerActions"]
+layout_mode = 1
+anchor_left = 0.64
+anchor_right = 1
+anchor_bottom = 0.32
+text = "角度"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.70, 0.35, 0.43, 1)
+mouse_filter = 2
+
+[node name="Rotation" type="HSlider" parent="StickerActions"]
+layout_mode = 1
+anchor_left = 0.64
+anchor_right = 1
+anchor_top = 0.32
+anchor_bottom = 1.0
+min_value = -180.0
+max_value = 180.0
+value = 0.0
+theme_override_styles/slider = SubResource("sticker_track")
+theme_override_styles/grabber_area = SubResource("sticker_track")
+theme_override_styles/grabber_area_highlight = SubResource("sticker_track")
+theme_override_icons/grabber = ExtResource("sticker_knob")
+theme_override_icons/grabber_highlight = ExtResource("sticker_knob")
+
+[node name="Confirm" parent="." instance=ExtResource("confirm")]
+
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker0"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker1"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker2"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker3"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker4"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker5"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker6"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker7"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker8"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker9"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker10"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker11"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker12"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker13"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker14"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker15"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker16"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker17"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker18"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker19"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker20"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker21"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker22"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker23"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker24"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker25"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker26"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker27"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker28"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker29"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker30"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker31"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker32"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker33"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker34"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker35"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker36"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker37"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker38"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker39"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker40"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker41"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker42"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker43"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker44"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker45"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker46"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker47"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker48"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker49"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker50"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker51"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker52"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker53"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker54"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker55"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker56"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker57"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="Selection" type="TextureRect" parent="Tools/Stickers/Grid/Sticker58"]
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = ExtResource("sticker_frame")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+
+[node name="Caption" type="Label" parent="Tools/Sizes/Size0"]
+layout_mode = 0
+offset_left = 78.0
+offset_right = 126.0
+offset_bottom = 62.0
+text = "小"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.88, 0.74, 0.76, 1)
+
+[node name="Caption" type="Label" parent="Tools/Sizes/Size1"]
+layout_mode = 0
+offset_left = 78.0
+offset_right = 126.0
+offset_bottom = 62.0
+text = "中"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.88, 0.74, 0.76, 1)
+
+[node name="Caption" type="Label" parent="Tools/Sizes/Size2"]
+layout_mode = 0
+offset_left = 78.0
+offset_right = 126.0
+offset_bottom = 62.0
+text = "大"
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.88, 0.74, 0.76, 1)
+
+[node name="Label" type="Label" parent="Tools/Sizes"]
+layout_mode = 0
+offset_right = 96.0
+offset_bottom = 62.0
+text = "笔刷"
+vertical_alignment = 1
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.78, 0.58, 0.57, 1)

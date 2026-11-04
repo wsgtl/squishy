@@ -1,0 +1,8 @@
+[gd_resource type="Theme" format=3 uid="uid://djqi100w7gfnm"]
+
+[ext_resource type="FontFile" uid="uid://ciyvgio3cypcs" path="res://fonts/rounded-mplus-2p-medium.ttf" id="font"]
+
+[resource]
+default_font = ExtResource("font")
+default_font_size = 26
+Label/colors/font_color = Color(0.72, 0.42, 0.44, 1)
