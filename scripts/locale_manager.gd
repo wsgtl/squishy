@@ -4,12 +4,14 @@ signal language_changed
 
 const JAPANESE: Dictionary = preload("res://locales/ja.json").data
 const UI_THEME = preload("res://resources/ui_theme.tres")
+const CJK_FALLBACK: Font = preload("res://fonts/GenRyuMin2TW-SB.otf")
 const SETTINGS_PATH := "user://language.cfg"
 const OPTIONS := ["zh", "ja"]
 var preference := "zh"
 var system_language := "zh"
 
 func _enter_tree() -> void:
+	ui_font()
 	for locale in ["zh", "ja"]:
 		var translation := Translation.new()
 		translation.locale = locale
@@ -86,7 +88,12 @@ func language_selection_allowed() -> bool:
 	return system_language == "zh"
 
 func ui_font() -> Font:
-	return UI_THEME.default_font
+	# Web cannot reliably access system CJK fonts. Keep the Japanese face first,
+	# and use the bundled Chinese face only for glyphs it does not contain.
+	var font: Font = UI_THEME.default_font
+	if font.fallbacks.is_empty():
+		font.fallbacks = [CJK_FALLBACK, ThemeDB.fallback_font]
+	return font
 
 func font_path() -> String:
 	return UI_THEME.default_font.resource_path

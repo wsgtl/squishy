@@ -17,6 +17,12 @@ var _feel_sliders: Dictionary = {}
 const BlobScript = preload("res://scripts/blob_deformer.gd")
 
 const DoodleCanvas = preload("res://scripts/doodle_canvas.gd")
+const StickerProjector = preload("res://scripts/sticker_projector.gd")
+var _sticker_projector: RefCounted
+var _sticker_pose: Dictionary = {}
+var _sticker_rects: Array = []
+var _sticker_preview_time := 0
+const STICKER_PREVIEW_INTERVAL_MS := 50
 var _doodle := DoodleCanvas.new()
 var _doodle_enabled := false
 var _sticker_enabled := false
@@ -226,12 +232,14 @@ func _input(event: InputEvent) -> void:
 			_draw_to(event.position)
 			_doodle.end_stroke()
 			_drawing = false
+			_refresh_sticker_preview(true)
 		elif event is InputEventScreenDrag and event.index == _drawing_touch:
 			_draw_to(event.position)
 		elif event is InputEventScreenTouch and event.index == _drawing_touch and not event.pressed:
 			_draw_to(event.position)
 			_doodle.end_stroke()
 			_drawing = false
+			_refresh_sticker_preview(true)
 		# An owned stroke never becomes a press, stretch, or UI click.
 		get_viewport().set_input_as_handled()
 		return
@@ -585,6 +593,9 @@ func _calculate_screen_width_at_y(y: float) -> float:
 	return dist * tan(half_fov_rad) * 2.0 * aspect
 
 func _switch_model(path: String) -> void:
+	_sticker_projector = null
+	_sticker_pose.clear()
+	_sticker_rects.clear()
 	# Detach the previous collider before attaching a new model.
 	remove_child(_blob)
 	_blob.queue_free()
@@ -1063,7 +1074,11 @@ func _begin_drawing(point: Vector2, touch_id: int) -> bool:
 			_sticker_base = _doodle.image.duplicate() as Image
 			_sticker_cancel_image = _sticker_base
 			_sticker_pending = true
+			_sticker_pose.clear()
+			_sticker_rects.clear()
+			_sticker_preview_time = 0
 		_sticker_uv = hit.uv
+		_update_sticker_pose(hit)
 		_sticker_preview_dirty = true
 	else:
 		_sticker_undo = null
@@ -1078,6 +1093,7 @@ func _draw_to(point: Vector2) -> void:
 			var hit := _raycast_blob(point, true)
 			if not hit.is_empty():
 				_sticker_uv = hit.uv
+				_update_sticker_pose(hit)
 				_sticker_preview_dirty = true
 		return
 	# Sample the screen path, NOT a UV line: UV seams must never create a
@@ -1093,24 +1109,45 @@ func _draw_to(point: Vector2) -> void:
 			_doodle.stamp(hit.uv)
 	_drawing_last = point
 
-func _refresh_sticker_preview() -> void:
+func _update_sticker_pose(hit: Dictionary) -> void:
+	if _sticker_projector == null:
+		_sticker_projector = StickerProjector.new()
+		_sticker_projector.build(_blob._rest_positions, _blob._rest_normals, _blob._uvs, _blob._indices, _blob._model_size)
+	var normal: Vector3 = hit.local_normal.normalized()
+	var mesh: Node3D = _blob._external_mesh_instance
+	var camera_up := (mesh.global_basis.inverse() * _camera.global_basis.y).normalized()
+	var camera_right := (mesh.global_basis.inverse() * _camera.global_basis.x).normalized()
+	# Rebuild from the camera at every hit. Transporting the previous frame
+	# accumulates roll over curved surfaces, even when the angle slider is zero.
+	_sticker_pose = {"center": hit.rest_point, "normal": normal, "up": StickerProjector.surface_up(normal, camera_up, camera_right)}
+
+func _refresh_sticker_preview(force: bool = false) -> void:
 	if not _sticker_pending or not _sticker_preview_dirty:
 		return
-	_doodle.image = _sticker_base.duplicate() as Image
-	_doodle.place_sticker(_sticker_uv, _sticker_image, _sticker_width, _sticker_angle)
+	var now := Time.get_ticks_msec()
+	if not force and now - _sticker_preview_time < STICKER_PREVIEW_INTERVAL_MS:
+		return
+	if _sticker_projector == null or _sticker_pose.is_empty():
+		return
+	var size: Vector3 = _blob._model_size
+	var width := size[size.max_axis_index()] * clampf(float(_sticker_width) / DoodleCanvas.SIZE, 0.015, 1.0)
+	_sticker_rects = _sticker_projector.bake(_doodle.image, _sticker_base, _sticker_image, _sticker_pose, width, _sticker_angle, _sticker_rects)
+	_doodle.dirty = true
+	_sticker_preview_time = now
 	_sticker_preview_dirty = false
 
 func _confirm_sticker() -> void:
 	if not _sticker_pending:
 		return
-	_refresh_sticker_preview()
+	_refresh_sticker_preview(true)
 	_doodle.record_change(_sticker_cancel_image)
 	_sticker_undo = _sticker_base
-	_sticker_last = {"uv": _sticker_uv, "width": _sticker_width, "angle": _sticker_angle, "image": _sticker_image}
+	_sticker_last = {"uv": _sticker_uv, "width": _sticker_width, "angle": _sticker_angle, "image": _sticker_image, "pose": _sticker_pose.duplicate(true)}
 	_sticker_base = null
 	_sticker_cancel_image = null
 	_sticker_pending = false
 	_sticker_preview_dirty = false
+	_sticker_rects.clear()
 
 func _cancel_sticker() -> void:
 	if _sticker_pending:
@@ -1120,6 +1157,8 @@ func _cancel_sticker() -> void:
 	_sticker_cancel_image = null
 	_sticker_pending = false
 	_sticker_preview_dirty = false
+	_sticker_rects.clear()
+	_sticker_pose.clear()
 
 func _undo_sticker() -> void:
 	_cancel_sticker()
@@ -1138,6 +1177,9 @@ func _edit_last_sticker() -> void:
 	_sticker_width = _sticker_last.width
 	_sticker_angle = _sticker_last.angle
 	_sticker_image = _sticker_last.image
+	_sticker_pose = _sticker_last.pose.duplicate(true)
+	_sticker_rects.clear()
+	_doodle.image = _sticker_base.duplicate() as Image
 	_sticker_pending = true
 	_sticker_preview_dirty = true
 	var size_slider := find_child("DoodleSizeSlider", true, false) as VSlider

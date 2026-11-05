@@ -106,12 +106,12 @@ func run() -> void:
 	Input.parse_input_event(touch)
 	await process_frame
 	check(sticker.get_node("Selection").visible, "Stationary tap still selects sticker")
-	main._sticker_base = main._doodle.image.duplicate()
-	main._sticker_cancel_image = main._sticker_base
-	main._sticker_pending = true
-	main._sticker_uv = Vector2(0.5,0.5)
-	main._sticker_preview_dirty = true
-	main._refresh_sticker_preview()
+	# A UV alone no longer defines a sticker; use a real surface hit/frame.
+	main._apply_feel(3)
+	main._physics_process(1.0)
+	check(main._begin_drawing(Vector2(360,480), -1), "Sticker starts on an actual model surface")
+	main._drawing = false
+	main._refresh_sticker_preview(true)
 	check(main._doodle.undo_steps.is_empty(), "Sticker preview does not record history")
 	main._confirm_sticker()
 	check(main._doodle.undo_steps.size() == 1, "Sticker confirmation commits history")

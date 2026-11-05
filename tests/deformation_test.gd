@@ -639,44 +639,44 @@ func check_stickers() -> void:
 	var center := screen_point()
 	mouse_button(center, true)
 	await process_frame
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	var before: PackedByteArray = main._doodle.image.get_data()
 	check(main._drawing and not main._dragging and before != blank, "Click on model places bundled PNG without deformation")
 	motion(center + Vector2(50, 0))
 	mouse_button(center + Vector2(50, 0), false)
 	await process_frame
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	check(main._sticker_pending and main._doodle.image.get_data() != before, "Dragging moves the pending sticker without baking trails")
 	var moved: PackedByteArray = main._doodle.image.get_data()
 	var rotation := main.find_child("StickerRotationSlider", true, false) as HSlider
 	rotation.value = 45
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	check(main._doodle.image.get_data() != moved, "Rotation slider transforms the pending sticker")
 	slider.value = 240
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	var edited: PackedByteArray = main._doodle.image.get_data()
 	main._confirm_sticker()
 	check(not main._sticker_pending and main._sticker_undo != null, "Confirm commits an editable sticker and records undo")
 	main._edit_last_sticker()
 	rotation.value = 90
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	main._cancel_sticker()
 	check(main._doodle.image.get_data() == edited, "Cancel re-edit restores the confirmed sticker exactly")
 	main._edit_last_sticker()
 	rotation.value = -30
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	main._confirm_sticker()
 	check(main._doodle.image.get_data() != edited, "Confirmed sticker can be re-edited without duplicating it")
 	main._undo_sticker()
 	check(main._doodle.image.get_data() == blank, "Undo restores the exact canvas before the sticker")
 	main._begin_drawing(center, -1)
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	main._finish_gesture()
 	main._cancel_sticker()
 	check(main._doodle.image.get_data() == blank, "Cancel pending placement leaves no ink")
 	slider.value = 180
 	main._begin_drawing(center, -1)
-	main._refresh_sticker_preview()
+	main._refresh_sticker_preview(true)
 	main._finish_gesture()
 	await screenshot("doodle-sticker")
 	button.button_pressed = false
