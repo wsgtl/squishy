@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://b8kyf2cvxt2as"
-path="res://.godot/imported/宝石.glb-5b3399e900bb45d572e2b590890f3ad1.scn"
+uid="uid://d34qo32nhpsns"
+path="res://.godot/imported/fy.glb-b33e835813a1f806039ef5b5af11e10b.scn"
 
 [deps]
 
-source_file="res://glb/宝石.glb"
-dest_files=["res://.godot/imported/宝石.glb-5b3399e900bb45d572e2b590890f3ad1.scn"]
+source_file="res://glb/fy.glb"
+dest_files=["res://.godot/imported/fy.glb-b33e835813a1f806039ef5b5af11e10b.scn"]
 
 [params]
 

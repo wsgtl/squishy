@@ -3,7 +3,8 @@ var host: Node3D
 
 func setup(scene: Node3D) -> void:
 	host = scene
-	$ReturnHomeButton.pressed.connect(host._return_home)
+	$WaxButton.pressed.connect(host._toggle_wax_mode)
+	$ReturnHomeButton.pressed.connect(host._game_back)
 	$SquishModeButton.pressed.connect(func(): host._set_doodle_enabled(false))
 	$DoodleButton.pressed.connect(func(): host._set_doodle_enabled(true))
 	$SoundButton.pressed.connect(func():
@@ -17,6 +18,11 @@ func refresh_language() -> void:
 	if host == null:
 		return
 	$SoundButton.visible = not host._doodle_enabled
+	var wax_active: bool = host._wax_mode != null
+	$WaxButton.visible = not host._doodle_enabled and not wax_active
+	for node in [$ModeBackground,$SquishModeButton,$DoodleButton,$Divider]:
+		node.visible = not wax_active
+	$WaxButton/Caption.text = tr("碎")
 	$SceneCaptureButton.offset_top = -65.0 if host._doodle_enabled else 0.0
 	$SceneCaptureButton.offset_bottom = 31.0 if host._doodle_enabled else 96.0
 	$Edit.refresh_language()

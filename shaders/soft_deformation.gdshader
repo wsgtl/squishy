@@ -15,6 +15,9 @@ uniform float material_specular : hint_range(0.0, 1.0) = 0.5;
 uniform float dent_shadow_strength : hint_range(0.0, 0.8) = 0.225;
 varying float dent_shadow;
 uniform vec3 model_center;
+uniform vec3 wax_anchor = vec3(0.0);
+uniform vec3 wax_bend = vec3(0.0);
+uniform float wax_twist = 0.0;
 uniform vec3 model_size = vec3(1.0);
 uniform float model_radius = 1.0;
 uniform vec3 anchor_point;
@@ -188,6 +191,21 @@ vec3 grip_offset(vec3 p) {
 	return grip_axis * (offset.x + grip_shake) + vec3(0.0, 1.0, 0.0) * offset.y + along * (offset.z + grip_shake_vertical);
 }
 
+vec3 wax_offset(vec3 p) {
+	float sigma=max(model_radius*0.65,0.00001);
+	vec3 centered=p-model_center;
+	vec3 axis=normalize(wax_anchor-model_center+vec3(0.000001));
+	vec3 relative=p-wax_anchor;
+	float local_weight=exp(-dot(relative,relative)/(2.0*sigma*sigma));
+	vec3 opposite=model_center-(wax_anchor-model_center);
+	vec3 opposite_relative=p-opposite;
+	float opposite_weight=exp(-dot(opposite_relative,opposite_relative)/(2.0*sigma*sigma));
+	float radial=dot(wax_bend,axis);
+	vec3 transverse=centered-axis*dot(centered,axis);
+	float contraction=clamp(radial/max(model_radius,0.00001),-0.5,0.5)*0.20;
+	return wax_bend*local_weight+axis*radial*opposite_weight*0.30-transverse*contraction;
+}
+
 vec3 deform(vec3 p, out vec3 contact_offset) {
 	vec3 relative = p - anchor_point;
 	vec3 offset = vec3(0.0);
@@ -262,7 +280,7 @@ vec3 deform(vec3 p, out vec3 contact_offset) {
 		float compressible = max(height * 0.85, model_radius * 0.000001);
 		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible));
 	}
-	return p + offset * (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) + grip_offset(p);
+	return p + offset * (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) + grip_offset(p) + wax_offset(p);
 }
 
 void vertex() {

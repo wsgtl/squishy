@@ -106,6 +106,29 @@ var _board_source_size := Vector3(1.349289, 0.075418, 1.349289)
 
 # 字体
 var _cjk_font: FontFile
+var _wax_mode: Node3D
+
+func _toggle_wax_mode() -> void:
+	_finish_gesture()
+	_blob.cancel_grip()
+	_blob.reset_deformation()
+	if _wax_mode != null:
+		_wax_mode.close()
+		_wax_mode = null
+	else:
+		_wax_mode = preload("res://scripts/wax_mode.gd").new()
+		add_child(_wax_mode)
+		_wax_mode.setup(self)
+	_grip_button.visible = _wax_mode == null
+	_twist_button.visible = _wax_mode == null
+	_hud_root.refresh_language()
+
+func _game_back() -> void:
+	if _wax_mode != null:
+		_toggle_wax_mode()
+		_update_camera_position()
+	else:
+		_return_home()
 
 func _ready() -> void:
 	_load_font()
@@ -154,6 +177,8 @@ func _apply_feel(index: int) -> void:
 	_blob._sync_gpu()
 
 func _return_home() -> void:
+	if _wax_mode != null:
+		_toggle_wax_mode()
 	var current_view := _camera.transform
 	if _scene_capture != null and _scene_capture.is_open():
 		_scene_capture.close()
@@ -212,6 +237,8 @@ func _load_font() -> void:
 # Capture an already-owned gesture before GUI dispatch so releasing over the
 # parameter panel cannot leave the model stuck. New gestures still respect UI.
 func _input(event: InputEvent) -> void:
+	if _wax_mode != null:
+		return
 	if _home_active:
 		return
 	if _scene_capture != null and _scene_capture.is_open():
@@ -276,6 +303,8 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _wax_mode != null:
+		return
 	if _home_active:
 		return
 	if _scene_capture != null and _scene_capture.is_open():
@@ -443,12 +472,17 @@ func _update_camera_position() -> void:
 		var horizontal := Vector3(cos(_camera_azimuth), 0.0, sin(_camera_azimuth))
 		_camera.position = target + (horizontal * cos(angle) + Vector3.UP * sin(angle)) * offset.length()
 		_camera.look_at(target, Vector3.UP * cos(angle) - horizontal * sin(angle))
+	if _wax_mode != null:
+		_wax_mode.adjust_camera(_camera)
 	if _page_restoring_pose and _page_camera_elapsed < PAGE_CAMERA_DURATION:
 		var blend := smoothstep(0.0, 1.0, _page_camera_elapsed / PAGE_CAMERA_DURATION)
 		_camera.transform = _page_camera_start_transform.interpolate_with(_camera.transform, blend)
 
 func _rotate_model(delta: Vector2) -> void:
 	if _model_root == null or _blob.is_gripping():
+		return
+	if _wax_mode != null:
+		_wax_mode.rotate_model(delta)
 		return
 	_model_root.rotate_y(delta.x * 0.008)
 
@@ -1188,6 +1222,8 @@ func _edit_last_sticker() -> void:
 	rotation.value = rad_to_deg(_sticker_angle)
 
 func _set_doodle_enabled(enabled: bool) -> void:
+	if _wax_mode != null:
+		_toggle_wax_mode()
 	if _doodle_enabled == enabled:
 		return
 	if not enabled:

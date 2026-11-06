@@ -845,6 +845,31 @@ func _grab_dent(position: Vector3, point: Vector3, normal: Vector3) -> Vector3:
 	var depth := minf(sigma * 0.7, _model_size.dot(normal.abs()) * 0.2)
 	return -normal * depth * mask * _grab_pressure
 
+# Keep the Gaussian displacement gradient below 1 to avoid local folding.
+const WAX_MAX_DRAG_RADIUS_RATIO := 0.66
+var wax_bend := Vector3.ZERO
+var wax_twist := 0.0
+var wax_anchor := Vector3.ZERO
+
+func set_wax_drag(bend: Vector3, twist: float) -> void:
+	wax_bend = bend.limit_length(_model_radius*WAX_MAX_DRAG_RADIUS_RATIO)
+	wax_twist = twist
+	_cpu_dirty = true
+	_pick_dirty = true
+	_sync_gpu()
+
+func _wax_offset(p: Vector3) -> Vector3:
+	var sigma := maxf(_model_radius*0.65,0.00001)
+	var axis := (wax_anchor-_model_center+Vector3.ONE*0.000001).normalized()
+	var local_weight := exp(-p.distance_squared_to(wax_anchor)/(2.0*sigma*sigma))
+	var opposite := _model_center-(wax_anchor-_model_center)
+	var opposite_weight := exp(-p.distance_squared_to(opposite)/(2.0*sigma*sigma))
+	var radial := wax_bend.dot(axis)
+	var centered := p-_model_center
+	var transverse := centered-axis*centered.dot(axis)
+	var contraction := clampf(radial/maxf(_model_radius,0.00001),-0.5,0.5)*0.20
+	return wax_bend*local_weight+axis*radial*opposite_weight*0.30-transverse*contraction
+
 func _target_offset_for(rest_position: Vector3) -> Vector3:
 	var relative := rest_position - _anchor_point
 	var offset := _dent_at(rest_position, _anchor_point, _anchor_normal, _press_amount)
@@ -919,7 +944,7 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 		var height := maxf(rest_position.y - bottom, 0.0)
 		var compressible := maxf(height * 0.85, _model_radius * 0.000001)
 		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible))
-	return offset * (1.0 - clampf(grip_amount * 1.5, 0.0, 1.0)) + _grip_offset(rest_position)
+	return offset * (1.0 - clampf(grip_amount * 1.5, 0.0, 1.0)) + _grip_offset(rest_position) + _wax_offset(rest_position)
 
 func _build_nodes() -> void:
 	_mesh_instance = MeshInstance3D.new()
@@ -1051,6 +1076,9 @@ func _setup_gpu() -> void:
 func _sync_gpu() -> void:
 	if _shader_material == null:
 		return
+	_shader_material.set_shader_parameter("wax_anchor", wax_anchor)
+	_shader_material.set_shader_parameter("wax_bend", wax_bend)
+	_shader_material.set_shader_parameter("wax_twist", wax_twist)
 	_shader_material.set_shader_parameter("twist_mode", _twist_mode)
 	_shader_material.set_shader_parameter("twist_axis", _twist_axis)
 	_shader_material.set_shader_parameter("twist_extent", _twist_extent)
