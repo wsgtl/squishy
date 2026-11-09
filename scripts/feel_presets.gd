@@ -15,12 +15,24 @@ const MODELS := ["res://glb/fy.glb", "res://glb/sfl.glb", "res://glb/df.glb", "r
 static func model_path(index: int) -> String:
  return MODELS[clampi(index, 0, MODELS.size() - 1)]
 
+# Shared material controls for every normal squish action.
+const RESPONSE := [
+ {"limit":1.0,"recovery":1.3,"elasticity":0.75,"bounce":0.40,"single":false,"stretch_speed":1.0,"single_damping":0.65},
+ {"limit":0.69444444,"recovery":2.1,"elasticity":0.18,"bounce":0.12,"single":true,"stretch_speed":1.3,"single_damping":0.58},
+ {"limit":1.0,"recovery":1.04,"elasticity":0.8,"bounce":0.48,"single":false,"stretch_speed":1.0,"single_damping":0.65},
+ {"limit":1.0,"recovery":2.52,"elasticity":0.4,"bounce":0.24,"single":false,"stretch_speed":1.0,"single_damping":0.65},
+]
+
 static func parameters(index: int) -> Dictionary:
- var type: Dictionary = TYPES[clampi(index, 0, TYPES.size()-1)]
- var soft: float = type.soft / 5.0
- var bounce: float = type.bounce / 5.0
- return {"softness":1.6*soft, "min_depth":0.5*soft,
- "grip_deformation_scale":soft/0.8, "twist_deformation_scale":soft/0.8,
- "stretch_sensitivity":2.5*soft, "max_stretch":3.6*soft,
- "recovery_time":lerpf(4.0,0.3,bounce), "elasticity":bounce,
- "initial_bounce":0.6*bounce, "rebound_vibration":0.5*bounce}
+ var selected := clampi(index,0,TYPES.size()-1)
+ var type: Dictionary = TYPES[selected]
+ var response: Dictionary = RESPONSE[selected]
+ var soft: float = type.soft/5.0
+ var limit: float = response.limit
+ return {"softness":1.6*soft,"min_depth":0.5*soft*limit,
+ "grip_deformation_scale":soft/0.8*limit,"twist_deformation_scale":soft/0.8*limit,
+ "stretch_sensitivity":2.5*soft,"max_stretch":3.6*soft*limit,
+ "recovery_time":response.recovery,"elasticity":response.elasticity,
+ "initial_bounce":response.bounce,"rebound_vibration":0.5*response.elasticity,
+ "single_rebound":response.single,"single_rebound_damping":response.single_damping,
+ "stretch_recovery_speed":response.stretch_speed}

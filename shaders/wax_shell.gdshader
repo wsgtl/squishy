@@ -4,12 +4,13 @@ render_mode cull_disabled, depth_prepass_alpha;
 uniform int cell_count = 0;
 uniform vec3 cell_seeds[64];
 uniform float cell_damage[64];
+uniform float cell_curl[64];
 uniform vec3 partition_axis = vec3(1.0,0.0,0.0);
 uniform vec3 model_center;
 uniform vec3 wax_anchor = vec3(0.0);
 uniform vec3 wax_bend = vec3(0.0);
 uniform float model_radius = 1.0;
-uniform float opacity : hint_range(0.0, 1.0) = 0.55;
+uniform float opacity : hint_range(0.0, 1.0) = 0.28;
 uniform float stress_opacity = 0.96;
 uniform vec4 stress_color : source_color = vec4(0.913725, 0.913725, 0.898039, 1.0);
 uniform float strain_gain = 2.272727;
@@ -39,7 +40,18 @@ void vertex() {
 		vec3(0.0,1.0,0.0)+(wax_offset(VERTEX+vec3(0.0,epsilon,0.0))-offset)/epsilon,
 		vec3(0.0,0.0,1.0)+(wax_offset(VERTEX+vec3(0.0,0.0,epsilon))-offset)/epsilon);
 	if (abs(determinant(jacobian))>0.00001) { NORMAL=normalize(transpose(inverse(jacobian))*NORMAL); }
-	VERTEX+=offset;
+	float nearest=1e20;
+	int cell=0;
+	for (int i=0;i<64;i++) {
+		if (i>=cell_count) { break; }
+		vec3 delta=rest_point-cell_seeds[i];
+		float along=dot(delta,partition_axis);
+		float metric=dot(delta,delta)+along*along*3.0;
+		if (metric<nearest) { nearest=metric; cell=i; }
+	}
+	float edge=clamp(length(rest_point-cell_seeds[cell])/max(model_radius*0.24,0.00001),0.0,1.0);
+	float curl=cell_count>0 ? cell_curl[cell] : 0.0;
+	VERTEX+=offset+NORMAL*model_radius*0.055*edge*edge*curl;
 }
 
 void fragment() {
@@ -81,11 +93,17 @@ void fragment() {
 		float visible=smoothstep(reveal*0.65,reveal*0.65+0.18,damage);
 		crack_distance=distance_to_border+(1.0-visible)*model_radius;
 	}
-	float rim = 1.0-smoothstep(model_radius*0.005,model_radius*0.018,crack_distance);
-	ALBEDO = mix(ALBEDO,stress_color.rgb,rim);
+	// A narrow opaque lip with a wider frosted shoulder; stable in rest coordinates.
+	float grain=0.5+0.5*sin(dot(rest_point/model_radius,vec3(91.0,67.0,113.0)));
+	float width=model_radius*mix(0.016,0.022,grain);
+	float lip=1.0-smoothstep(model_radius*0.003,width,crack_distance);
+	float shoulder=1.0-smoothstep(width,model_radius*0.040,crack_distance);
+	ALBEDO=mix(ALBEDO,stress_color.rgb,shoulder*0.32);
+	ALBEDO=mix(ALBEDO,vec3(0.96,0.96,0.94),lip);
 	if (crack_distance < model_radius*0.003) { discard; }
-	whitening = max(whitening,rim);
-	ROUGHNESS = 0.68;
-	SPECULAR = 0.25;
-	ALPHA = mix(max(opacity, COLOR.a), stress_opacity, whitening);
+	float grazing=pow(1.0-clamp(dot(normalize(NORMAL),normalize(VIEW)),0.0,1.0),3.0);
+	ROUGHNESS=mix(0.40,0.62,shoulder);
+	SPECULAR=mix(0.38,0.48,lip);
+	float film_alpha=clamp(opacity+grazing*0.10,0.0,1.0);
+	ALPHA=mix(film_alpha,stress_opacity,max(whitening,max(lip,shoulder*0.28)));
 }

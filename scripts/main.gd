@@ -1,5 +1,7 @@
 extends Node3D
 
+var _action_audio: Node
+
 const MODEL_PATH := "res://glb/sfl.glb"
 const ModelProfiles = preload("res://scripts/model_profiles.gd")
 const MODEL_WIDTH := 2.0
@@ -60,6 +62,7 @@ var _camera_returning := false
 var _camera_return_elapsed := 0.0
 
 var _twist_button: Button
+var _flatten_button: Button
 var _grip_button: Button
 
 var _camera: Camera3D
@@ -119,6 +122,7 @@ func _toggle_wax_mode() -> void:
 		_wax_mode = preload("res://scripts/wax_mode.gd").new()
 		add_child(_wax_mode)
 		_wax_mode.setup(self)
+	_flatten_button.visible = _wax_mode == null
 	_grip_button.visible = _wax_mode == null
 	_twist_button.visible = _wax_mode == null
 	_hud_root.refresh_language()
@@ -131,6 +135,8 @@ func _game_back() -> void:
 		_return_home()
 
 func _ready() -> void:
+	_action_audio = preload("res://scripts/action_audio.gd").new()
+	add_child(_action_audio)
 	_load_font()
 	_build_environment()
 	_build_stage()
@@ -243,7 +249,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if _scene_capture != null and _scene_capture.is_open():
 		return
-	if _blob.is_gripping():
+	if _blob.is_grip_held():
 		# Leave GUI events available, but discard any old model gesture ownership.
 		if _dragging or _is_rotating or _active_touch_id >= 0:
 			_finish_gesture()
@@ -309,7 +315,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _scene_capture != null and _scene_capture.is_open():
 		return
-	if _blob.is_gripping():
+	if _blob.is_grip_held():
 		return
 	# Native GUI sliders and ColorPicker need touch-generated mouse events.
 	# The model uses real touch IDs, so never process that second event stream.
@@ -462,7 +468,7 @@ func _update_camera_position() -> void:
 	else:
 		_camera.look_at(_look_at_target, Vector3.UP)
 
-	if _blob != null and _blob.grip_stage > 0.0 and not _doodle_enabled:
+	if _blob != null and _blob.grip_stage > 0.0 and not _blob._flatten_mode and not _doodle_enabled:
 		var stage := smoothstep(0.0, 1.0, _blob.grip_stage)
 		var mesh_node: Node3D = _blob._external_mesh_instance
 		var lift := _blob._model_radius * 1.8 * mesh_node.global_basis.y.length() * stage
@@ -479,7 +485,7 @@ func _update_camera_position() -> void:
 		_camera.transform = _page_camera_start_transform.interpolate_with(_camera.transform, blend)
 
 func _rotate_model(delta: Vector2) -> void:
-	if _model_root == null or _blob.is_gripping():
+	if _model_root == null or _blob.is_grip_held():
 		return
 	if _wax_mode != null:
 		_wax_mode.rotate_model(delta)
@@ -487,7 +493,7 @@ func _rotate_model(delta: Vector2) -> void:
 	_model_root.rotate_y(delta.x * 0.008)
 
 func _begin_pointer(screen_position: Vector2, stretch: bool, button: int) -> void:
-	if _doodle_enabled or _blob.is_gripping():
+	if _doodle_enabled or _blob.is_grip_held():
 		return
 	var hit := _raycast_blob(screen_position)
 	if hit.is_empty():
@@ -973,9 +979,18 @@ func _build_hud() -> void:
 	vibration_row.add_child(vibration_slider)
 	_feel_sliders["rebound_vibration"] = vibration_slider
 
+	_flatten_button = root.get_node("FlattenButton")
+	_flatten_button.button_down.connect(func():
+		if not _home_active and not _doodle_enabled and not _blob.is_grip_held():
+			_finish_gesture()
+			_blob.begin_flatten()
+	)
+	_flatten_button.button_up.connect(func():
+		if _blob._flatten_mode: _blob.set_grip_held(false)
+	)
 	_grip_button = root.get_node("GripButton")
 	_grip_button.button_down.connect(func():
-		if not _home_active and not _doodle_enabled and not _blob.is_gripping():
+		if not _home_active and not _doodle_enabled and not _blob.is_grip_held():
 			_finish_gesture()
 			_blob.set_grip_axis(_camera.global_basis.x)
 			_blob.set_grip_held(true)
@@ -986,9 +1001,8 @@ func _build_hud() -> void:
 	)
 	_twist_button = root.get_node("TwistButton")
 	_twist_button.button_down.connect(func():
-		if not _home_active and not _doodle_enabled and not _blob.is_gripping():
+		if not _home_active and not _doodle_enabled and not _blob.is_grip_held():
 			_finish_gesture()
-			_blob.set_grip_axis(_camera.global_basis.x)
 			_blob.begin_twist()
 	)
 	_twist_button.button_up.connect(func():
@@ -1077,6 +1091,20 @@ func _on_vibration_changed(value: float) -> void:
 		_blob.rebound_vibration = value
 
 func _process(delta: float) -> void:
+	var sound_action := ""
+	var sound_strength := 0.0
+	var sound_enabled: bool = is_instance_valid(_blob) and not _home_active and not _doodle_enabled and _wax_mode == null and (_scene_capture == null or not _scene_capture.is_open())
+	if sound_enabled:
+		if _blob.is_grip_held():
+			sound_action = "stretch" if _blob._twist_mode else "squeeze"
+			sound_strength = _blob.grip_amount
+		elif _dragging and _stretching:
+			sound_action = "stretch"
+			sound_strength = _blob._smooth_pull.length()/maxf(_blob._model_radius*_blob.max_stretch,0.001)
+		elif _dragging:
+			sound_action = "press"
+			sound_strength = _blob._press_amount
+	_action_audio.update_action(sound_action, sound_strength, delta, sound_enabled, _pointer_position, get_viewport().get_visible_rect().size.x)
 	_refresh_sticker_preview()
 	if _sticker_enabled and not _sticker_actions.is_empty():
 		_sticker_actions["ConfirmStickerButton"].disabled = not _sticker_pending
@@ -1230,6 +1258,7 @@ func _set_doodle_enabled(enabled: bool) -> void:
 		_cancel_sticker()
 	_finish_gesture()
 	_doodle_enabled = enabled
+	_flatten_button.visible = not enabled
 	_grip_button.visible = not enabled
 	_twist_button.visible = not enabled
 	if enabled:

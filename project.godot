@@ -18,6 +18,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 LocaleManager="*res://scripts/locale_manager.gd"
+UiAudio="*res://scripts/ui_audio.gd"
 
 [display]
 
@@ -28,6 +29,7 @@ window/stretch/aspect="keep_width"
 window/handheld/orientation=1
 
 [gui]
+
 theme/custom="res://resources/ui_theme.tres"
 
 [physics]

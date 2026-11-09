@@ -19,7 +19,7 @@ var speck_clock := 0
 var avoidance_bounds := AABB()
 const WAX_COLORS := [Color("f2ead2"), Color("f58cb2"), Color("85c7ef"), Color("ffdf66")]
 const WAX_NAMES := ["Clear", "Pink", "Sky", "Yellow"]
-const WAX_OPACITY := 0.55
+const WAX_OPACITY := 0.28
 const WAX_STRESSED_OPACITY := 0.96
 const WAX_STRESS_COLOR := Color("e9e9e5")
 var selected_color := 0
@@ -192,8 +192,8 @@ func setup(scene: Node3D) -> void:
 	mat.albedo_color = Color.WHITE
 	mat.vertex_color_use_as_albedo = true
 	mat.vertex_color_is_srgb = true
-	mat.roughness = 0.68
-	mat.metallic_specular = 0.25
+	mat.roughness = 0.42
+	mat.metallic_specular = 0.38
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	attached_material = ShaderMaterial.new()
 	attached_material.shader = preload("res://shaders/wax_shell.gdshader")
@@ -563,12 +563,16 @@ func _process(delta: float) -> void:
 			crack_growth.dirty = false
 			var cell_seeds := PackedVector3Array()
 			var cell_damage := PackedFloat32Array()
+			var cell_curl := PackedFloat32Array()
 			for region: Dictionary in crack_growth.regions:
 				cell_seeds.append(region.center)
+				cell_curl.append(region.get("curl",0.0))
 				cell_damage.append(0.0 if region.broken else region.get("network_progress",0.0))
 			attached_material.set_shader_parameter("cell_count",cell_seeds.size())
 			cell_seeds.resize(64)
 			cell_damage.resize(64)
+			cell_curl.resize(64)
+			attached_material.set_shader_parameter("cell_curl",cell_curl)
 			attached_material.set_shader_parameter("cell_seeds",cell_seeds)
 			attached_material.set_shader_parameter("cell_damage",cell_damage)
 			attached_material.set_shader_parameter("partition_axis",crack_growth.pull_axis)
@@ -703,23 +707,35 @@ func _step_debris(delta: float) -> void:
 		fragment.age += delta
 		var node: Node3D = fragment.node
 		if not fragment.resting:
-			fragment.velocity.y -= 9.8*delta
-			node.global_position += fragment.velocity*delta
-			node.rotate_x(fragment.spin.x*delta)
-			node.rotate_y(fragment.spin.y*delta)
-			node.rotate_z(fragment.spin.z*delta)
-			node.global_position = _outside_model(node.global_position,minf(fragment.bounds.size.x,fragment.bounds.size.z)*0.15)
-			# Project the fragment's bounding box onto world Y; no collision shapes.
-			var bounds: AABB = fragment.bounds
-			var bottom: float = (node.global_transform*bounds.get_center()).y - absf(node.global_basis.x.y)*bounds.size.x*0.5 - absf(node.global_basis.y.y)*bounds.size.y*0.5 - absf(node.global_basis.z.y)*bounds.size.z*0.5
-			if bottom < -0.035:
-				node.global_position.y += -0.035-bottom
-				fragment.velocity.y = absf(fragment.velocity.y)*0.16
-				fragment.velocity.x *= 0.4
-				fragment.velocity.z *= 0.4
-				fragment.spin *= 0.25
-				fragment.bounces += 1
-				if fragment.bounces >= 2 or fragment.velocity.length()<0.12:
+			var flight: float = clampf(fragment.age/fragment.flight_duration,0.0,1.0)
+			if not fragment.get("settling",false):
+				# Continuous launch-to-landing arc; no instantaneous collision projection.
+				node.global_position = fragment.launch.lerp(fragment.landing,flight)
+				node.global_position.y += 4.0*fragment.arc_height*flight*(1.0-flight)
+			if fragment.get("settling",false):
+				fragment.settle_time += delta
+				var blend := smoothstep(0.0,0.32,fragment.settle_time)
+				var rotation: Quaternion = fragment.settle_rotation.slerp(fragment.flat_rotation,blend)
+				node.global_basis = Basis(rotation).scaled(Vector3(1.0,lerpf(1.0,0.12,blend),1.0))
+			else:
+				node.rotate_x(fragment.spin.x*delta)
+				node.rotate_y(fragment.spin.y*delta)
+				node.rotate_z(fragment.spin.z*delta)
+			# Exact vertex support avoids a rotated AABB suspending curved shards.
+			var lowest := INF
+			for point: Vector3 in fragment.points:
+				lowest = minf(lowest,(node.global_basis*point).y)
+			if not fragment.get("settling",false):
+				# Blend to the current rotated support height, avoiding a snap on touchdown.
+				node.global_position.y += (-0.033-lowest-fragment.landing.y)*smoothstep(0.65,1.0,flight)
+			if flight>=1.0 or fragment.get("settling",false):
+				node.global_position.y = -0.033-lowest
+				fragment.velocity = Vector3.ZERO
+				if not fragment.get("settling",false):
+					fragment.settling = true
+					fragment.settle_time = 0.0
+					fragment.settle_rotation = node.global_basis.get_rotation_quaternion()
+				if fragment.settle_time>=0.32:
 					fragment.resting = true
 
 func _spawn_fragment(patch: Dictionary, anchor: Vector3, basis: Basis) -> void:
@@ -737,8 +753,18 @@ func _spawn_fragment(patch: Dictionary, anchor: Vector3, basis: Basis) -> void:
 		var local: Vector3 = patch.vertices[i]-patch.center
 		if patch.get("dynamic_fragment",false):
 			local += host._blob._wax_offset(patch.vertices[i])-host._blob._wax_offset(patch.center)
+			var relative: Vector3 = patch.vertices[i]-patch.center
+			var extent := maxf(radius*0.24,0.00001)
+			var edge := clampf(relative.length()/extent,0.0,1.0)
+			local += patch.normals[i]*radius*0.055*edge*edge*patch.get("curl",0.0)
 		points.append(world_basis*local)
 		normals.append((normal_basis*patch.normals[i]).normalized())
+	var average_normal := Vector3.ZERO
+	for normal: Vector3 in normals: average_normal += normal
+	if average_normal.length_squared()<0.000001: average_normal = Vector3.UP
+	var flat_rotation := Quaternion(average_normal.normalized(),Vector3.UP)
+	var clearance := 0.0
+	for point: Vector3 in points: clearance = maxf(clearance,point.length())
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = points
@@ -752,9 +778,20 @@ func _spawn_fragment(patch: Dictionary, anchor: Vector3, basis: Basis) -> void:
 	visual.material_override = shell_material
 	visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(visual)
-	visual.global_position = _outside_model(launch,minf(fragment_mesh.get_aabb().size.x,fragment_mesh.get_aabb().size.z)*0.15)
-	var outward := _launch_direction(visual.global_position)
+	visual.global_position = launch
+	var outward := _launch_direction(launch)
+	var horizontal_box := avoidance_bounds.grow(clearance+0.04)
+	var half := horizontal_box.size*0.5
+	var edge_distance := minf(half.x/maxf(absf(outward.x),0.00001),half.z/maxf(absf(outward.z),0.00001))
+	var landing := horizontal_box.get_center()+outward*(edge_distance+0.04)
+	var lowest := INF
+	for point: Vector3 in points: lowest = minf(lowest,point.y)
+	landing.y = -0.035-lowest
+	var flight_duration := rng.randf_range(0.5,0.7)
+	var arc_height := maxf(0.16,avoidance_bounds.size.y*0.35+(launch.y-landing.y)*0.30)
 	debris.append({"node":visual,"bounds":fragment_mesh.get_aabb(),"age":0.0,"resting":false,"bounces":0,
+		"points":points,"clearance":clearance,"flat_rotation":flat_rotation,
+		"launch":launch,"landing":landing,"flight_duration":flight_duration,"arc_height":arc_height,
 		"velocity":outward*rng.randf_range(0.12,0.22)+Vector3.UP*rng.randf_range(0.15,0.28),
 		"spin":Vector3(rng.randf_range(-2,2),rng.randf_range(-2,2),rng.randf_range(-2,2))})
 

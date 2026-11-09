@@ -3,8 +3,9 @@ extends RefCounted
 # First pull fixes a directional 64-cell partition. Both platforms use the
 # same bounded seed search and clipping work; fragments remain attached until
 # their own damage reaches the release threshold.
-const FRAGILE_RATIO := 0.30
-const CRACK_SPEED_MULTIPLIER := 1.5
+const FATIGUE_THRESHOLDS := [0.35, 0.85, 1.65]
+const CURL_DURATION := 0.28
+const CRACK_SPEED_MULTIPLIER := 3.0
 const CRACK_COMPLETE := 0.83 # Shader reveal maximum: 0.65 + 0.18
 const TARGET_PIECES := 64
 const MAX_FRAGMENTS := TARGET_PIECES
@@ -47,7 +48,6 @@ var previous_bend := Vector3.ZERO
 var sampled_bend := Vector3.ZERO
 var speed_exposure := 0.0
 var sampled_gesture := -1
-var was_pulling := false
 var release_rng := RandomNumberGenerator.new()
 
 func setup(mode, patch: Dictionary) -> void:
@@ -73,7 +73,8 @@ func step(delta: float = 1.0/60.0) -> void:
 	var speed: float = blob.wax_bend.distance_to(sampled_bend)/maxf(owner_mode.radius*dt,0.000001)
 	sampled_bend = blob.wax_bend
 	var recovering: bool = started and owner_mode.drag_id == -2 and (blob.wax_bend.length()>owner_mode.radius*0.003 or speed>0.03)
-	if (pulling or recovering) and not regions.is_empty():
+	var fracture_active: bool = pulling or recovering
+	if fracture_active and not regions.is_empty():
 		if pulling: last_gesture = owner_mode.gesture_serial
 		load_clock += dt
 		speed_exposure += _speed_damage_rate(speed)*dt
@@ -85,12 +86,12 @@ func step(delta: float = 1.0/60.0) -> void:
 		load_clock = 0.0
 		speed_exposure = 0.0
 		previous_bend = blob.wax_bend
-	if was_pulling and not pulling:
-		_queue_rebound_release()
-	was_pulling = pulling
-	_update_completed_fragments(dt)
-	if ready:
-		_release_rebound_fragments(dt)
+	# Preserve rebound fatigue and release, but stop draining the queue at rest.
+	# Already airborne debris continues its independent flight animation.
+	if fracture_active:
+		_update_completed_fragments(dt)
+		if ready:
+			_release_rebound_fragments(dt)
 
 func _begin(anchor: Vector3, bend: Vector3) -> void:
 	started = true
@@ -167,11 +168,11 @@ func _assign_toughness() -> void:
 		var saved := order[i]
 		order[i] = order[j]
 		order[j] = saved
-	var fragile_count := roundi(regions.size()*FRAGILE_RATIO)
 	for rank in range(order.size()):
 		var patch: Dictionary = regions[order[rank]]
-		patch.fragile = rank<fragile_count
-		patch.toughness = release_rng.randf_range(0.28,0.48) if patch.fragile else release_rng.randf_range(0.85,2.10)
+		patch.fatigue_tier = rank%3
+		patch.toughness = FATIGUE_THRESHOLDS[rank%3]
+		patch.curl = 0.0
 
 func _bisector(a: Vector3, b: Vector3) -> Plane:
 	var difference := b-a
@@ -296,37 +297,18 @@ func _apply_gesture(gesture: Dictionary) -> void:
 			patch.visible_time = patch.get("visible_time",0.0)+dt
 		if rate>0.018:
 			patch.last_stressed_gesture = gesture.id
-		if patch.network_progress>=CRACK_COMPLETE and not patch.has("release_wait"):
-			# Sample once at completion: current rebound, next pull, or second pull.
-			var roll := release_rng.randf()
-			if patch.get("fragile",false):
-				patch.release_wait = 0 if roll<0.80 else 1
-			else:
-				patch.release_wait = 0 if roll<0.45 else (1 if roll<0.80 else 2)
-			patch.completed_gesture = gesture.id
-			patch.release_timeout = release_rng.randf_range(0.12,0.35) if patch.release_wait==0 else release_rng.randf_range(1.2,2.4)
-			if gesture.get("recovering",false) and patch.release_wait==0:
-				patch.release_delay = release_rng.randf_range(0.06,0.20)
+		if patch.network_progress>=CRACK_COMPLETE and not patch.has("curl_age"):
+			patch.curl_age = 0.0
 	dirty = true
 
-func _queue_rebound_release() -> void:
-	for patch: Dictionary in regions:
-		if patch.broken or not patch.has("release_wait"): continue
-		if patch.get("last_stressed_gesture",-1)!=last_gesture: continue
-		if patch.get("last_release_gesture",-1)==last_gesture: continue
-		patch.last_release_gesture = last_gesture
-		if last_gesture!=patch.completed_gesture:
-			patch.release_wait = maxi(0,patch.release_wait-1)
-		if patch.release_wait==0 and not patch.has("release_delay"):
-			patch.release_delay = release_rng.randf_range(0.06,0.28)
-
 func _update_completed_fragments(dt: float) -> void:
-	# Start timeout when detached geometry is usable, not while the job is blocked.
 	if not ready: return
 	for patch: Dictionary in regions:
-		if patch.broken or not patch.has("release_wait"): continue
-		patch.release_timeout = patch.get("release_timeout",1.2)-dt
-		if patch.release_timeout<=0.0 and not patch.has("release_delay"):
+		if patch.broken or not patch.has("curl_age"): continue
+		patch.curl_age += dt
+		patch.curl = smoothstep(0.0,CURL_DURATION,patch.curl_age)
+		dirty = true
+		if patch.curl_age>=CURL_DURATION and not patch.has("release_delay"):
 			patch.release_delay = 0.0
 
 func _release_rebound_fragments(dt: float) -> void:

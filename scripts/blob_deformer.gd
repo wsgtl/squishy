@@ -18,6 +18,9 @@ class_name BlobDeformer
 # 弹性抖动 (0-1, 默认0.55) - 松手后的果冻感
 @export var elasticity: float = 0.55
 # 初始回弹 (0-0.6, 默认0.24) - 松手后的回弹力度
+@export var single_rebound := false
+@export var single_rebound_damping := 0.65
+@export var stretch_recovery_speed := 1.0
 @export var initial_bounce: float = 0.24
 # 拉伸灵敏度 (0.3-2.5, 默认1.3) - 拉动转化为形变的倍率
 @export var stretch_sensitivity: float = 1.3
@@ -106,6 +109,7 @@ var _grip_extent := 0.0
 var _grip_width := 0.0
 var _grip_velocity := 0.0
 var _grip_held := false
+var _flatten_mode := false
 var _grip_shake := 0.0
 var _grip_shake_vertical := 0.0
 var _grip_shake_vertical_ratio := 0.25
@@ -380,7 +384,7 @@ func end_interaction() -> void:
 			_press_rebounding = true
 			_stretch_recovering = true
 			_smooth_pull = Vector3.ZERO
-			var frequency := TAU * 2.5 / maxf(recovery_time, 0.3)
+			var frequency := _material_rebound_omega()
 			_pull_velocity = -_rebound_axis * _model_radius * 0.12 * strength * frequency
 	_interaction_mode = -1
 	_pull_offset = Vector3.ZERO
@@ -449,8 +453,10 @@ func _to_mesh_local(world_point: Vector3) -> Vector3:
 	return to_local(world_point)
 
 func set_grip_axis(world_right: Vector3) -> void:
-	if is_gripping():
+	if is_grip_held():
 		return
+	if is_gripping() and (_flatten_mode or _twist_mode):
+		cancel_grip()
 	var mesh_node: Node3D = _external_mesh_instance if _external_mesh_instance != null else self
 	_twist_mode = false
 	_grip_axis = mesh_node.global_basis.inverse() * world_right
@@ -464,8 +470,11 @@ func set_grip_axis(world_right: Vector3) -> void:
 		_grip_width = maxf(_grip_width, absf((p - _model_center).dot(_grip_axis)))
 
 func begin_twist() -> void:
-	if is_gripping():
+	if is_grip_held():
 		return
+	if is_gripping() and not _twist_mode:
+		cancel_grip()
+	_flatten_mode = false
 	_twist_mode = true
 	_twist_direction = -1.0 if _grip_rng.randf() < 0.5 else 1.0
 	_twist_axis = twist_axis_local.normalized() if twist_axis_local.length_squared() > 0.0001 else (Vector3.RIGHT if _model_size.x >= _model_size.z else Vector3.FORWARD)
@@ -508,11 +517,21 @@ func _twist_offset(p: Vector3) -> Vector3:
 	return result + _grip_axis * _grip_shake + _grip_axis.cross(Vector3.UP) * _grip_shake_vertical
 
 func set_grip_held(held: bool) -> void:
+	if held: _flatten_mode = false
 	_grip_held = held
 	if not held:
 		_stop_grip_haptic()
 
+func begin_flatten() -> void:
+	if is_grip_held(): return
+	if is_gripping() and not _flatten_mode:
+		cancel_grip()
+	_twist_mode = false
+	_flatten_mode = true
+	_grip_held = true
+
 func cancel_grip() -> void:
+	_flatten_mode = false
 	_stop_grip_haptic()
 	_grip_shake = 0.0
 	_grip_shake_vertical = 0.0
@@ -526,8 +545,19 @@ func cancel_grip() -> void:
 	_pick_dirty = true
 	_sync_gpu()
 
+func is_grip_held() -> bool:
+	return _grip_held
+
 func is_gripping() -> bool:
 	return _grip_held or grip_stage > 0.0001 or absf(grip_amount) + absf(_grip_velocity) > 0.0001
+
+func _material_rebound_omega() -> float:
+	return (6.0 if single_rebound else lerpf(8.0,14.0,elasticity))/maxf(recovery_time,0.3)
+
+func _material_rebound_damping(value: float, velocity: float) -> float:
+	if single_rebound:
+		return 1.0 if value<0.0 and velocity>=0.0 else single_rebound_damping
+	return clampf(0.85-elasticity*0.65-initial_bounce*0.15,0.25,0.85)
 
 func _step_grip(delta: float) -> void:
 	if not is_gripping():
@@ -538,8 +568,10 @@ func _step_grip(delta: float) -> void:
 	var dt := minf(delta, 0.1) / steps
 	# Keep normalized hold progress for the camera and limit shake; only the
 	# deformation channels scale with softness. Release uses the feel's spring.
-	var damping := 1.0 if _grip_held else clampf(0.95 - 0.63 * elasticity - 0.15 * initial_bounce / 0.6, 0.25, 0.95)
-	var omega := 8.0 if _grip_held else 12.0 / (damping * recovery)
+	var damping := 1.0 if _grip_held else _material_rebound_damping(grip_amount,_grip_velocity)
+	var omega := 8.0 if _grip_held else _material_rebound_omega()
+	if _flatten_mode and not _grip_held:
+		omega *= stretch_recovery_speed
 	for i in range(steps):
 		_grip_velocity += (omega * omega * ((1.0 if _grip_held else 0.0) - grip_amount) - 2.0 * damping * omega * _grip_velocity) * dt
 		grip_amount += _grip_velocity * dt
@@ -553,7 +585,7 @@ func _step_grip(delta: float) -> void:
 
 # One random, smooth left/right pulse per cycle; only a scalar is sent to the GPU.
 func _step_grip_shake(delta: float) -> void:
-	if not _grip_held or grip_amount < 0.94:
+	if _flatten_mode or not _grip_held or grip_amount < 0.94:
 		_grip_shake *= exp(-30.0 * delta)
 		_grip_shake_vertical *= exp(-30.0 * delta)
 		if absf(_grip_shake_vertical) < _model_radius * 0.000001:
@@ -624,6 +656,27 @@ func _grip_pose_parameters(amount: float) -> Vector4:
 	return keys[index].lerp(keys[index + 1], smoothstep(0.0, 1.0, phase - index)) * grip_deformation_scale
 
 func _grip_offset(p: Vector3) -> Vector3:
+	if _flatten_mode:
+		var amount := minf(grip_amount*grip_deformation_scale,1.0)
+		# Keep a nonzero mapping slope at large overshoot to avoid a visual plateau.
+		if amount<0.0:
+			amount = amount*0.65 + amount*0.35/sqrt(1.0+pow(amount/0.15,2.0))
+		var bottom := _model_center.y-_model_size.y*0.5
+		var height_scale := 1.0-0.55*amount
+		var spread := 1.0/sqrt(height_scale)-1.0
+		var height := maxf(_model_size.y,0.00001)
+		var level := clampf((p.y-bottom)/height,0.0,1.0)
+		var nx := (p.x-_model_center.x)/maxf(_model_size.x*0.5,0.00001)
+		var nz := (p.z-_model_center.z)/maxf(_model_size.z*0.5,0.00001)
+		var radial := sqrt(nx*nx+nz*nz)
+		var center_dent := exp(-radial*radial/0.30)
+		var rim := exp(-pow((radial-0.82)/0.30,2.0))
+		var top_weight := smoothstep(0.25,1.0,level)
+		var profile := sin(PI*level)
+		var outward := spread+amount*0.10*profile*(0.4+0.6*rim)
+		var vertical := -(p.y-bottom)*0.55*amount
+		vertical += height*amount*top_weight*(-0.16*center_dent+0.055*rim)
+		return Vector3((p.x-_model_center.x)*outward,vertical,(p.z-_model_center.z)*outward)
 	if _twist_mode:
 		return _twist_offset(p)
 	var pose := _grip_pose_parameters(grip_amount)
@@ -678,17 +731,10 @@ func _physics_process(delta: float) -> void:
 	# positions receive identical displacement, even across disconnected UV seams.
 	_grab_pressure = lerpf(_grab_pressure, 1.0 if _interaction_mode == MODE_STRETCH else 0.0, 1.0 - exp(-minf(delta, 0.1) * 16.0))
 	var active := _interaction_mode >= 0
-	var omega := 24.0 if active else 8.0 / maxf(recovery_time, 0.3)
-	if not active and raised_rim_press and (not _stretch_recovering or _press_rebounding):
-		omega /= 0.55
-	var damping_ratio := 0.9 if active else clampf(1.0 - elasticity * 0.55 - initial_bounce * 0.2, 0.35, 1.0)
-	# Three oscillation periods per recovery_time, with a decaying envelope.
-	# Press recovery keeps its softer response; only released stretch rings.
-	var pull_omega := TAU * 3.0 / maxf(recovery_time, 0.3) if not active and _stretch_recovering else omega
-	var pull_damping := clampf(0.23 - elasticity * 0.09 - initial_bounce * 0.02, 0.12, 0.23) if not active and _stretch_recovering else damping_ratio
-	if not active and _press_rebounding:
-		pull_omega = TAU * 2.5 / maxf(recovery_time, 0.3)
-		pull_damping = 0.25
+	var omega := 24.0 if active else _material_rebound_omega()
+	var damping_ratio := 0.9 if active else _material_rebound_damping(_press_amount,_press_velocity)
+	var pull_omega := omega * (stretch_recovery_speed if not active and _stretch_recovering and not _press_rebounding else 1.0)
+	var pull_damping := damping_ratio if active else _material_rebound_damping(_smooth_pull.dot(_rebound_axis),_pull_velocity.dot(_rebound_axis))
 	var follow := 1.0 - exp(-22.0 * minf(delta, 0.1))
 	# Position follows the latest stable-surface hit within this frame. Only
 	# pressure depth and departed material recover over time, never the pointer.
@@ -700,7 +746,7 @@ func _physics_process(delta: float) -> void:
 			if _trail_retire_times[i] >= _trail_retire_duration():
 				_remove_press_trail(i)
 				continue
-		var trail_recovery := maxf(recovery_time, 0.3) * (GATHER_TRAIL_RECOVERY_SCALE if raised_rim_press else 1.0)
+		var trail_recovery := maxf(recovery_time, 0.3)
 		var decay := exp(-3.0 * minf(delta, 0.1) / trail_recovery)
 		_trail_amounts[i] *= decay
 		_trail_end_amounts[i] *= decay
@@ -944,7 +990,7 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 		var height := maxf(rest_position.y - bottom, 0.0)
 		var compressible := maxf(height * 0.85, _model_radius * 0.000001)
 		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible))
-	return offset * (1.0 - clampf(grip_amount * 1.5, 0.0, 1.0)) + _grip_offset(rest_position) + _wax_offset(rest_position)
+	return offset * (1.0 - clampf(grip_amount * 1.5, 0.0, 1.0) if _grip_held else 1.0) + _grip_offset(rest_position) + _wax_offset(rest_position)
 
 func _build_nodes() -> void:
 	_mesh_instance = MeshInstance3D.new()
@@ -1084,6 +1130,9 @@ func _sync_gpu() -> void:
 	_shader_material.set_shader_parameter("twist_extent", _twist_extent)
 	_shader_material.set_shader_parameter("twist_direction", _twist_direction)
 	_shader_material.set_shader_parameter("twist_deformation_scale", twist_deformation_scale)
+	_shader_material.set_shader_parameter("grip_held", _grip_held)
+	_shader_material.set_shader_parameter("flatten_mode", _flatten_mode)
+	_shader_material.set_shader_parameter("flatten_strength", grip_deformation_scale)
 	_shader_material.set_shader_parameter("grip_amount", grip_amount)
 	_shader_material.set_shader_parameter("grip_pose", _grip_pose_parameters(grip_amount))
 	_shader_material.set_shader_parameter("grip_stage", grip_stage)

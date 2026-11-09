@@ -33,6 +33,7 @@ func refresh_language() -> void:
 	$FeelName.text = tr(host.FeelPresets.TYPES[host._selected_feel].name)
 	$GripButton/Caption.text = tr("挤压")
 	$TwistButton/Caption.text = tr("扭转")
+	$FlattenButton/Caption.text = tr("压扁")
 	var audible := not AudioServer.is_bus_mute(0)
 	$SoundButton/Caption.text = tr("有声音") if audible else tr("静音")
 	$SoundButton/Caption.add_theme_color_override("font_color", Color("#ad641f"))

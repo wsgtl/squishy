@@ -81,6 +81,7 @@ func capture_scene() -> void:
 	if busy or is_open():
 		return
 	busy = true
+	get_node("/root/UiAudio").play_shutter()
 	host._finish_gesture()
 	host._refresh_sticker_preview()
 	host._doodle.flush()

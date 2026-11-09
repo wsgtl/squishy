@@ -14,6 +14,9 @@ uniform float material_metallic = 0.0;
 uniform float material_specular : hint_range(0.0, 1.0) = 0.5;
 uniform float dent_shadow_strength : hint_range(0.0, 0.8) = 0.225;
 varying float dent_shadow;
+uniform bool grip_held = false;
+uniform bool flatten_mode = false;
+uniform float flatten_strength = 1.0;
 uniform vec3 model_center;
 uniform vec3 wax_anchor = vec3(0.0);
 uniform vec3 wax_bend = vec3(0.0);
@@ -144,6 +147,26 @@ vec3 twist_offset(vec3 p) {
 }
 
 vec3 grip_offset(vec3 p) {
+	if (flatten_mode) {
+		float amount=min(grip_amount*flatten_strength,1.0);
+		if (amount<0.0) {
+			amount=amount*0.65+amount*0.35/sqrt(1.0+pow(amount/0.15,2.0));
+		}
+		float bottom=model_center.y-model_size.y*0.5;
+		float spread=inversesqrt(1.0-0.55*amount)-1.0;
+		float height=max(model_size.y,0.00001);
+		float level=clamp((p.y-bottom)/height,0.0,1.0);
+		vec2 normalized_xz=(p.xz-model_center.xz)/max(model_size.xz*0.5,vec2(0.00001));
+		float radial=length(normalized_xz);
+		float center_dent=exp(-radial*radial/0.30);
+		float rim=exp(-pow((radial-0.82)/0.30,2.0));
+		float top_weight=smoothstep(0.25,1.0,level);
+		float profile=sin(3.14159265359*level);
+		float outward=spread+amount*0.10*profile*(0.4+0.6*rim);
+		float vertical=-(p.y-bottom)*0.55*amount;
+		vertical+=height*amount*top_weight*(-0.16*center_dent+0.055*rim);
+		return vec3((p.x-model_center.x)*outward,vertical,(p.z-model_center.z)*outward);
+	}
 	if (twist_mode) { return twist_offset(p); }
 	vec4 pose = grip_pose;
 	vec3 centered = p - model_center;
@@ -241,7 +264,7 @@ vec3 deform(vec3 p, out vec3 contact_offset) {
 		vec3 grab_b = grab_dent(p, grab_point_b, grab_normal_b);
 		offset += dot(grab_a, grab_a) >= dot(grab_b, grab_b) ? grab_a : grab_b;
 	}
-	contact_offset = offset * (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0));
+	contact_offset = offset * (grip_held ? (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) : 1.0);
 	float bottom = model_center.y - model_size.y * 0.5;
 	float squash = clamp(squash_amount * squash_strength, -0.04, 0.18);
 	float spread = inversesqrt(1.0 - squash) - 1.0;
@@ -280,7 +303,7 @@ vec3 deform(vec3 p, out vec3 contact_offset) {
 		float compressible = max(height * 0.85, model_radius * 0.000001);
 		offset.y = -height * 0.85 * (1.0 - exp(offset.y / compressible));
 	}
-	return p + offset * (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) + grip_offset(p) + wax_offset(p);
+	return p + offset * (grip_held ? (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) : 1.0) + grip_offset(p) + wax_offset(p);
 }
 
 void vertex() {

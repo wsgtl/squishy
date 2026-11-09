@@ -178,17 +178,20 @@ stretch_mode = 5
 
 [node name="GripButton" type="Button" parent="." unique_id=1221529148]
 layout_mode = 0
-anchor_left = 0.14
+anchor_left = 0.04
 anchor_top = 0.69
-anchor_right = 0.14
+anchor_right = 0.04
 anchor_bottom = 0.69
-offset_right = 250.0
+offset_right = 200.0
 offset_bottom = 86.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
+
+[node name="PressAnimation" type="Node" parent="GripButton"]
+script = ExtResource("anim")
 
 [node name="Background" type="TextureRect" parent="GripButton" unique_id=1171797410]
 layout_mode = 1
@@ -211,17 +214,20 @@ vertical_alignment = 1
 
 [node name="TwistButton" type="Button" parent="." unique_id=532527323]
 layout_mode = 0
-anchor_left = 0.53
+anchor_left = 0.36
 anchor_top = 0.69
-anchor_right = 0.53
+anchor_right = 0.36
 anchor_bottom = 0.69
-offset_right = 250.0
+offset_right = 200.0
 offset_bottom = 86.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
+
+[node name="PressAnimation" type="Node" parent="TwistButton"]
+script = ExtResource("anim")
 
 [node name="Background" type="TextureRect" parent="TwistButton" unique_id=353484155]
 layout_mode = 1
@@ -239,6 +245,42 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 text = "扭转"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="FlattenButton" type="Button" parent="."]
+layout_mode = 0
+anchor_left = 0.68
+anchor_top = 0.69
+anchor_right = 0.68
+anchor_bottom = 0.69
+offset_right = 200.0
+offset_bottom = 86.0
+focus_mode = 0
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="PressAnimation" type="Node" parent="FlattenButton"]
+script = ExtResource("anim")
+
+[node name="Background" type="TextureRect" parent="FlattenButton"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("pink")
+expand_mode = 1
+
+[node name="Caption" type="Label" parent="FlattenButton"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "压扁"
 horizontal_alignment = 1
 vertical_alignment = 1
 

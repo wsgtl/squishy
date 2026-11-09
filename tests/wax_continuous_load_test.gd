@@ -20,15 +20,11 @@ func run() -> void:
 	main._blob.set_wax_drag(Vector3.RIGHT*main._blob._model_radius*0.5,0.0)
 	growth.step(0.05)
 	assert(not growth.regions.is_empty(),"First pull exposes final cell IDs before clipping completes")
-	var fragile_count := 0
+	var tiers := [0,0,0]
 	for patch: Dictionary in growth.regions:
-		if patch.fragile:
-			fragile_count += 1
-			assert(patch.toughness>=0.28 and patch.toughness<=0.48)
-		else:
-			assert(patch.toughness>=0.85 and patch.toughness<=2.10)
-	assert(fragile_count==roundi(growth.regions.size()*0.30),"Thirty percent of pieces have low fatigue tolerance")
-	assert(is_equal_approx(growth.CRACK_SPEED_MULTIPLIER,1.5))
+		tiers[patch.fatigue_tier] += 1
+		assert(patch.toughness==growth.FATIGUE_THRESHOLDS[patch.fatigue_tier])
+	assert(absi(tiers[0]-tiers[2])<=1,"Three fatigue tiers have equal quotas")
 	var seeds_before: PackedVector3Array = growth.seeds.duplicate()
 	var initial: float = growth.regions[0].network_progress
 	for i in range(12): growth.step(0.05)
@@ -52,7 +48,7 @@ func run() -> void:
 	growth.sampled_bend = Vector3.RIGHT*main._blob._model_radius*0.4
 	main._blob.set_wax_drag(Vector3.RIGHT*main._blob._model_radius*0.2,0.0)
 	growth.step(0.05)
-	assert(recovering_patch.network_progress>0.0,"Released recovering deformation adds fatigue")
+	assert(recovering_patch.network_progress>0.0,"Actual rebound still adds fatigue")
 	main._blob.set_wax_drag(Vector3.ZERO,0.0)
 	growth.sampled_bend = Vector3.ZERO
 	# Deterministic timeout path: no new gesture or extra fatigue is required.
@@ -63,11 +59,16 @@ func run() -> void:
 			break
 	assert(not target.is_empty())
 	target.network_progress = growth.CRACK_COMPLETE
-	target.release_wait = 2
-	target.release_timeout = 0.2
+	target.curl_age = 0.0
 	var before: int = growth.fragment_count
+	for i in range(30): growth.step(0.05)
+	assert(not target.broken,"Resting state cannot drain queued fragments")
+	assert(is_zero_approx(target.curl_age),"Resting state pauses fracture progression")
+	wax.drag_id = 0
+	main._blob.set_wax_drag(Vector3.RIGHT*main._blob._model_radius*0.2,0.0)
 	for i in range(10): growth.step(0.05)
-	assert(target.broken,"Completed fragment drops on elapsed time without another pull")
+	assert(target.broken,"Completed fragment resumes curl and release during an actual pull")
+	assert(is_equal_approx(target.curl,1.0),"Curl completes before release")
 	assert(growth.fragment_count>before)
 	# A backlog may release only one piece until the global cooldown expires.
 	var queued := 0
