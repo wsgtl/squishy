@@ -17,6 +17,7 @@ var erasing := false
 var image: Image
 var texture: ImageTexture
 var dirty := false
+var has_content := false
 var _stroke_active := false
 var _stroke_before: Image
 var undo_steps: Array[PackedByteArray] = []
@@ -114,6 +115,7 @@ func flush() -> void:
 
 # Lossless bounded snapshots, committed once per stroke/action, never per frame.
 func record_change(before: Image) -> void:
+	has_content = image.get_used_rect().has_area()
 	if before == null or before.get_data() == image.get_data():
 		return
 	undo_steps.append(before.get_data().compress(FileAccess.COMPRESSION_FASTLZ))
@@ -140,6 +142,7 @@ func redo() -> void:
 
 func _restore(data: PackedByteArray) -> void:
 	image = Image.create_from_data(SIZE, SIZE, false, Image.FORMAT_RGBA8, data.decompress(SIZE * SIZE * 4, FileAccess.COMPRESSION_FASTLZ))
+	has_content = image.get_used_rect().has_area()
 	dirty = true
 
 func reset_history() -> void:

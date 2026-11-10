@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync(require('path').join(__dirname,'../scripts/scene_capture.gd'),'utf8');
+const template=source.split('const WEB_ENCODE_JPEG := """')[1].split('"""')[0];
+const pixels=Buffer.from([120,60,30,255]);
+const code=template.replace('%s',JSON.stringify(pixels.toString('base64'))).replace('%s','1').replace('%s','1');
+const logs=[],canvases=[];
+let fail=false;
+const ctx={atob,Uint8ClampedArray,ImageData:class {constructor(data,w,h){assert.deepEqual(Array.from(data),Array.from(pixels));assert.equal(w,1);assert.equal(h,1);}},window:{punikkoShareLog:(event,data)=>logs.push({event,data})},document:{createElement(tag){assert.equal(tag,'canvas');const canvas={getContext:()=>({putImageData(){}}),toDataURL(type,q){assert.equal(type,'image/jpeg');assert.equal(q,.93);if(fail)throw new Error('encode failed');return 'data:image/jpeg;base64,/9j/2Q==';}};canvases.push(canvas);return canvas;}}};
+for(let i=0;i<3;i++)assert.equal(vm.runInNewContext(code,ctx),'/9j/2Q==');
+fail=true;assert.equal(vm.runInNewContext(code,ctx),'');
+assert.equal(logs.at(-1).event,'capture.browser_encode_failed');
+assert(canvases.every(c=>c.width===0&&c.height===0));
+console.log('Browser JPEG bridge: repeated encoding, RGBA input, error handling and canvas cleanup PASS');

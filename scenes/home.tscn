@@ -30,6 +30,8 @@
 
 [ext_resource type="Script" path="res://scripts/button_press_animation.gd" id="press_animation"]
 
+[ext_resource type="PackedScene" path="res://scenes/confirm.tscn" id="brand_confirm"]
+
 [sub_resource type="StyleBoxEmpty" id="empty"]
 
 [node name="HomeScreen" type="Control" unique_id=721225589]
@@ -43,15 +45,15 @@ mouse_filter = 2
 theme = ExtResource("ui_theme")
 script = ExtResource("1")
 
-[node name="Logo" type="TextureRect" parent="." unique_id=2138676764]
+[node name="Logo" type="TextureButton" parent="." unique_id=2138676764]
 layout_mode = 0
 offset_left = 32.0
 offset_top = 23.0
 offset_right = 207.0
 offset_bottom = 143.0
-mouse_filter = 2
-texture = ExtResource("logo")
-expand_mode = 1
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("logo")
+ignore_texture_size = true
 stretch_mode = 5
 
 [node name="LanguageSelector" type="OptionButton" parent="." unique_id=1097933534]
@@ -556,3 +558,5 @@ script = ExtResource("press_animation")
 
 [node name="PressAnimation" type="Node" parent="StartSquishingButton"]
 script = ExtResource("press_animation")
+
+[node name="BrandConfirm" parent="." instance=ExtResource("brand_confirm")]

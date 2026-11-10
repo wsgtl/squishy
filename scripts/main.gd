@@ -106,6 +106,8 @@ var _look_at_target := Vector3(0.0, 1.0, 0.0)
 var _backdrop_material: ShaderMaterial
 var _board: Node3D
 var _board_source_size := Vector3(1.349289, 0.075418, 1.349289)
+var _board_source_center := Vector3.ZERO
+const BOARD_DIAMETER := MODEL_WIDTH * 1.65
 
 # 字体
 var _cjk_font: FontFile
@@ -582,11 +584,16 @@ func _build_stage() -> void:
 	# Use the authored bottom model instead of generating a primitive cylinder.
 	var bottom_scene := load("res://glb/bottom.glb")
 	if bottom_scene != null:
-		_board = bottom_scene.instantiate() as Node3D
-		if _board != null:
+		var imported_board := bottom_scene.instantiate() as Node3D
+		if imported_board != null:
+			# Scale a wrapper so the GLB's authored root transform is preserved.
+			_board = Node3D.new()
 			_board.name = "Bottom"
-			_board.position.y = 0.2123
 			add_child(_board)
+			_board.add_child(imported_board)
+			var bounds: AABB = _get_model_aabb(_board)
+			_board_source_size = bounds.size
+			_board_source_center = bounds.get_center()
 			_resize_board()
 			return
 	# Fallback for projects where the authored asset is unavailable.
@@ -606,9 +613,8 @@ func _build_stage() -> void:
 func _resize_board() -> void:
 	if _board == null or _camera == null:
 		return
-	var board_y := _board.position.y
-	var screen_width_world := _calculate_screen_width_at_y(board_y)
-	var target_diameter := screen_width_world * 1.2
+	# World-space size must not depend on viewport aspect or camera transitions.
+	var target_diameter := BOARD_DIAMETER
 	if _backdrop_material != null:
 		_backdrop_material.set_shader_parameter("board_radius", target_diameter * 0.5)
 	if _board is MeshInstance3D:
@@ -618,10 +624,11 @@ func _resize_board() -> void:
 			board_mesh.bottom_radius = target_diameter * 0.5
 		return
 	# The imported base keeps its authored proportions; only scale uniformly to
-	# match the same screen coverage as the old generated cylinder.
-	var authored_diameter := maxf(_board_source_size.x, _board_source_size.z)
+	# maintain a stable margin around the normalized product.
+	var authored_diameter := maxf(maxf(_board_source_size.x, _board_source_size.z), 0.001)
 	_board.scale = Vector3.ONE * (target_diameter / authored_diameter)
-	_board.position.y = 0.25 - _board_source_size.y * _board.scale.y * 0.5
+	_board.position = -_board_source_center * _board.scale
+	_board.position.y += 0.25 - _board_source_size.y * _board.scale.y * 0.5
 
 func _calculate_screen_width_at_y(y: float) -> float:
 	if _camera == null:

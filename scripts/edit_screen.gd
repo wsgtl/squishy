@@ -167,6 +167,8 @@ func _process(_delta: float) -> void:
 	$Tools/Sizes.visible = tool != 1
 	$Tools/Colors.visible = tool == 0
 	$Tools/Clear.visible = tool == 2
+	$Tools/Clear.disabled = not host._doodle.has_content and not host._sticker_pending
+	$Tools/Clear.modulate = Color(0.65, 0.65, 0.65, 0.45) if $Tools/Clear.disabled else Color.WHITE
 	$Tools/Stickers.visible = tool == 1
 	$StickerActions.visible = tool == 1 and host._sticker_pending
 	for i in range(3):

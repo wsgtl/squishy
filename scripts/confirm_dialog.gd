@@ -12,8 +12,8 @@ func _ready() -> void:
 			hide()
 	)
 
-func open() -> void:
-	$Card/Message.text = tr("清除全部涂鸦和贴纸？")
+func open(message: String = "清除全部涂鸦和贴纸？") -> void:
+	$Card/Message.text = tr(message)
 	$Card/Confirm/Caption.text = tr("确认")
 	$Card/Cancel/Caption.text = tr("取消")
 	show()

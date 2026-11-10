@@ -17,7 +17,7 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventScreenTouch:
-		if event.pressed and _scroll_pointer == -2:
+		if event.pressed:
 			_begin_scroll(event.position, event.index)
 		elif not event.pressed and _scroll_pointer == event.index:
 			_end_scroll(event.position, event.canceled)
@@ -58,12 +58,12 @@ func _end_scroll(position: Vector2, canceled: bool) -> void:
 				break
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		_scroll_pointer = -2
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_reset_touch()
 
 
 func _ready() -> void:
-	visibility_changed.connect(func(): _scroll_pointer = -2)
+	visibility_changed.connect(_reset_touch)
 	$Card/PreviewFrame/SceneCapturePreview.resized.connect(_update_preview_mask)
 	_update_preview_mask()
 
@@ -73,3 +73,8 @@ func _update_preview_mask() -> void:
 	var preview: TextureRect = $Card/PreviewFrame/SceneCapturePreview
 	var mask := preview.material as ShaderMaterial
 	mask.set_shader_parameter("preview_size", preview.size)
+
+func _reset_touch() -> void:
+	_scroll_pointer = -2
+	_scroll_dragging = false
+	_scroll_start = Vector2.ZERO

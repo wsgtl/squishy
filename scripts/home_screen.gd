@@ -16,7 +16,7 @@ var _scroll_dragging := false
 const SCROLL_DRAG_THRESHOLD := 10.0
 
 func _input(event: InputEvent) -> void:
-	if not is_visible_in_tree() or host == null or not host._home_active:
+	if not is_visible_in_tree() or host == null or not host._home_active or $BrandConfirm.visible:
 		_scroll_pointer = -2
 		return
 	# Own the gesture before child Buttons consume it. Real touch events are
@@ -66,6 +66,12 @@ func _end_scroll(position: Vector2, canceled: bool) -> void:
 				select(i)
 				break
 
+func _open_brand_site() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("window.location.assign('https://punikko.fun/')")
+	else:
+		OS.shell_open("https://punikko.fun/")
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_scroll_pointer = -2
@@ -79,6 +85,8 @@ func setup(scene: Node3D, font: Font) -> void:
 	language.select(LocaleManager.OPTIONS.find(LocaleManager.preference))
 	language.item_selected.connect(func(index: int): LocaleManager.set_language(LocaleManager.OPTIONS[index]))
 	$StartSquishingButton.pressed.connect(host._start_game)
+	$Logo.pressed.connect(func(): $BrandConfirm.open("即将离开游戏，前往 PUNIKKO 官网？"))
+	$BrandConfirm.confirmed.connect(_open_brand_site)
 	$SoundButton.toggled.connect(_set_sound)
 	$SoundButton.set_pressed_no_signal(not AudioServer.is_bus_mute(0))
 	_fade = ShaderMaterial.new()
