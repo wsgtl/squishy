@@ -2,6 +2,8 @@ extends Control
 var host: Node3D
 var tool := 0
 var selected_color := 0
+const BRUSH_SIZES = [2.5, 6.0, 12.0]
+const ERASER_SIZES = [5.0, 15.0, 24.0]
 const COLORS = ["#ed6667", "#f7cf62", "#75bd84", "#6daee1", "#ae87cb", "#976b50", "#ffffff", "#f5c8ae"]
 
 var _scroll_pointer := -2 # -2 idle, -1 mouse, >=0 touch ID
@@ -75,7 +77,7 @@ func setup(scene: Node3D) -> void:
 	for i in range(3):
 		get_node("Tools/Sizes/Size%d" % i).pressed.connect(func():
 			host._finish_gesture()
-			host._doodle.radius = [5.0, 15.0, 24.0][i]
+			host._doodle.radius = (ERASER_SIZES if tool == 2 else BRUSH_SIZES)[i]
 		)
 	for i in range(8):
 		get_node("Tools/Colors/Color%d" % i).pressed.connect(func():
@@ -140,8 +142,9 @@ func select_tool(value: int) -> void:
 	for i in range(3):
 		var names = ["Brush", "Sticker", "Eraser"]
 		var icons = ["brush", "sticker", "eraser"]
-		get_node("Tools/" + names[i] + "/Background").texture = load("res://res/ui/edit/tool_switch_button_%s.png" % ("selected" if tool == i else "unselected"))
-		get_node("Tools/" + names[i] + "/Icon").texture = load("res://res/ui/edit/tool_%s_%d.png" % [icons[i], int(tool == i)])
+		get_node("Tools/" + names[i] + "/Background").visible = tool == i
+		get_node("Tools/" + names[i] + "/Content/Row/Caption").add_theme_color_override("font_color", Color.WHITE if tool == i else Color("#c2798d"))
+		get_node("Tools/" + names[i] + "/Content/Row/Icon").texture = load("res://res/ui/edit/tool_%s_%d.png" % [icons[i], int(tool == i)])
 
 	refresh_language()
 
@@ -150,7 +153,8 @@ func refresh_language() -> void:
 	for i in range(3):
 		get_node("Tools/Sizes/Size%d/Caption" % i).text = tr(["小", "中", "大"][i])
 	for pair in [["Brush", "涂鸦"], ["Sticker", "贴纸"], ["Eraser", "橡皮擦"], ["Clear", "清空"]]:
-		get_node("Tools/" + pair[0] + "/Caption").text = tr(pair[1])
+		var caption_path: String = "/Caption" if pair[0] == "Clear" else "/Content/Row/Caption"
+		get_node("Tools/" + pair[0] + caption_path).text = tr(pair[1])
 	$StickerActions/Apply.text = tr("确认")
 	$StickerActions/SizeLabel.text = tr("缩放")
 	$StickerActions/RotationLabel.text = tr("角度")
@@ -172,10 +176,10 @@ func _process(_delta: float) -> void:
 	$Tools/Stickers.visible = tool == 1
 	$StickerActions.visible = tool == 1 and host._sticker_pending
 	for i in range(3):
-		var selected: bool = absf(host._doodle.radius - [5.0, 15.0, 24.0][i]) < 0.1
+		var selected: bool = absf(host._doodle.radius - (ERASER_SIZES if tool == 2 else BRUSH_SIZES)[i]) < 0.1
 		get_node("Tools/Sizes/Size%d/Background" % i).visible = selected
-		get_node("Tools/Sizes/Size%d/Dot" % i).modulate = Color("#ec8394") if selected else Color.WHITE
-		get_node("Tools/Sizes/Size%d/Caption" % i).add_theme_color_override("font_color", Color("#ec8394") if selected else Color("#e0bdc2"))
+		get_node("Tools/Sizes/Size%d/Dot" % i).modulate = Color("#df7295") if selected else Color.WHITE
+		get_node("Tools/Sizes/Size%d/Caption" % i).add_theme_color_override("font_color", Color("#df7295") if selected else Color.WHITE)
 	for i in range(8):
 		get_node("Tools/Colors/Color%d/Ring" % i).visible = i == selected_color
 
@@ -184,6 +188,11 @@ func covers(point: Vector2) -> bool:
 		return false
 	if $Confirm.visible:
 		return true
+	# Only the actual sticker controls block model gestures, not labels or gaps.
+	if $StickerActions.is_visible_in_tree():
+		for control in [$StickerActions/Apply, $StickerActions/Size, $StickerActions/Rotation]:
+			if control.get_global_rect().has_point(point):
+				return true
 	for child in get_children():
 		if child is Control and child.visible and child.mouse_filter != Control.MOUSE_FILTER_IGNORE and child.get_global_rect().has_point(point):
 			return true

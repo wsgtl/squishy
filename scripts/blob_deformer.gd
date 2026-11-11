@@ -97,6 +97,9 @@ const GRIP_HAND_SPAN_RATIO := 0.54
 @export_range(0.1, 1.25, 0.01) var grip_deformation_scale := 1.0
 @export_range(0.1, 1.25, 0.01) var twist_deformation_scale := 1.0
 @export var twist_axis_local := Vector3.ZERO # Zero selects the longer X/Z rest axis so the two short ends twist.
+var _render_log_time := -1000
+var _render_log_state := ""
+var _render_log_configured := false
 var _twist_mode := false
 var _twist_direction := 1.0
 var _twist_axis := Vector3.FORWARD
@@ -1189,3 +1192,47 @@ func _sync_gpu() -> void:
 	var neck := smoothstep(0.65, 2.6, signed_pull / _model_radius)
 	var extent := maxf(_deformation_axis().abs().dot(_model_size * 0.5), _model_radius * 0.01)
 	_shader_material.set_shader_parameter("stretch_shape", Vector4(factor, neck, extent, 1.0 / sqrt(factor)))
+	_log_render_state()
+
+
+# Diagnostic snapshots only: no vertex readback or changes to rendering.
+func _log_render_state() -> void:
+	if not OS.has_feature("web"):
+		return
+	var state := ("flatten" if _flatten_mode else ("twist" if _twist_mode else "squeeze")) if is_gripping() else ("press_or_stretch" if absf(_press_amount) + _smooth_pull.length() > 0.0001 else "idle")
+	state += "_held" if _grip_held else "_released"
+	var now := Time.get_ticks_msec()
+	if state == _render_log_state and (state.begins_with("idle") or now - _render_log_time < 750):
+		return
+	_render_log_state = state
+	_render_log_time = now
+	var instance := _external_mesh_instance if _external_mesh_instance != null else _mesh_instance
+	var data := {"state": state, "node": str(get_path()), "grip": grip_amount, "stage": grip_stage, "velocity": _grip_velocity, "press": _press_amount, "pull": str(_smooth_pull), "stretch": _signed_stretch(), "normal_sign": _normal_sign, "radius": _model_radius, "normal_epsilon": maxf(_model_radius * 0.004, 0.00001), "normal_method": "cartesian_pure_samples", "uniforms": {}}
+	for parameter in ["grip_axis", "grip_pose", "grip_shake", "grip_shake_vertical", "grip_hand_half_width", "twist_axis", "twist_direction", "twist_deformation_scale", "stretch_shape", "trail_count", "grab_pressure", "dent_shadow_strength", "has_normal_texture", "normal_strength", "material_roughness", "material_specular"]:
+		var value: Variant = _shader_material.get_shader_parameter(parameter)
+		data["uniforms"][parameter] = str(value)
+	data["finite"] = is_finite(grip_amount) and is_finite(_press_amount) and _smooth_pull.is_finite() and is_finite(_signed_stretch())
+	if instance != null:
+		data["transform"] = str(instance.global_transform)
+		data["determinant"] = instance.global_transform.basis.determinant()
+		data["cast_shadow"] = instance.cast_shadow
+	if not _render_log_configured:
+		_render_log_configured = true
+		data["engine"] = Engine.get_version_info()
+		data["vertices"] = _rest_positions.size()
+		data["normals"] = _rest_normals.size()
+		data["source_material"] = str(_source_material)
+		data["material_profile"] = material_profile
+		data["lights"] = []
+		for light in get_tree().root.find_children("*", "Light3D", true, false):
+			data["lights"].append({"name": str(light.name), "energy": light.light_energy, "shadow": light.shadow_enabled, "rotation": str(light.global_rotation)})
+	JavaScriptBridge.eval("window.punikkoRenderLatest = %s; if(window.punikkoShareLog) window.punikkoShareLog('render.state', window.punikkoRenderLatest);" % JSON.stringify(data), true)
+
+
+func set_diagnostic_surface_mode(rest_normal: bool, normal_color: bool = false, triangle_normal: bool = false) -> void:
+	if _shader_material == null:
+		return
+	_shader_material.set_shader_parameter("diagnostic_rest_normal", rest_normal)
+	_shader_material.set_shader_parameter("diagnostic_normal_color", normal_color)
+	_shader_material.set_shader_parameter("diagnostic_triangle_normal", triangle_normal)
+	_render_log_state = ""

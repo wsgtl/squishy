@@ -1,25 +1,40 @@
 [gd_scene format=3 uid="uid://cf28yobk1mevw"]
 
-[ext_resource type="PackedScene" path="res://scenes/edit.tscn" id="edit"]
-
-[ext_resource type="Theme" path="res://resources/ui_theme.tres" id="ui_theme"]
-
+[ext_resource type="Texture2D" uid="uid://b0gsoydkg1g3u" path="res://res/ui/game/btn_pinch.png" id="action_pinch"]
+[ext_resource type="Texture2D" uid="uid://hgaoy4j2054t" path="res://res/ui/game/btn_press.png" id="action_press"]
+[ext_resource type="Texture2D" uid="uid://c3jwpm58eq5l1" path="res://res/ui/game/btn_twist.png" id="action_twist"]
 [ext_resource type="Script" uid="uid://co6q8skxdnotk" path="res://scripts/button_press_animation.gd" id="anim"]
 [ext_resource type="Texture2D" uid="uid://c1v6a0vvopf6b" path="res://res/ui/game/btn_back.png" id="back"]
 [ext_resource type="Texture2D" uid="uid://d0l0q7a27w3dg" path="res://res/ui/game/ic_back.png" id="back_icon"]
 [ext_resource type="Texture2D" uid="uid://bwakbvvajfb44" path="res://res/ui/game/switch_draw_0.png" id="d0"]
+[ext_resource type="PackedScene" path="res://scenes/edit.tscn" id="edit"]
 [ext_resource type="Texture2D" uid="uid://byig2flhv48ws" path="res://res/ui/game/feel_name.png" id="feel"]
-[ext_resource type="Texture2D" uid="uid://dw46tlekch8uu" path="res://res/ui/game/btn_nie_green_1.png" id="green"]
+[ext_resource type="Texture2D" uid="uid://batidx2e4bd5o" path="res://res/ui/game/feel_pinch.png" id="icon_pinch"]
+[ext_resource type="Texture2D" uid="uid://dagjjkp55iofa" path="res://res/ui/game/feel_press.png" id="icon_press"]
+[ext_resource type="Texture2D" uid="uid://dcxk017v1jtb5" path="res://res/ui/game/feel_twist.png" id="icon_twist"]
 [ext_resource type="Texture2D" uid="uid://cv3fj7yxao564" path="res://res/ui/game/btn_photo.png" id="photo"]
 [ext_resource type="Texture2D" uid="uid://dfnbeq746va8j" path="res://res/ui/game/ic_photo.png" id="photo_icon"]
-[ext_resource type="Texture2D" uid="uid://cdvuydly1kno7" path="res://res/ui/game/btn_nie_pink_1.png" id="pink"]
+[ext_resource type="Texture2D" uid="uid://bqafxispekcv7" path="res://res/ui/game/btn_pinch_click.png" id="pinch_pressed"]
+[ext_resource type="Texture2D" uid="uid://btst2n53tsdst" path="res://res/ui/game/btn_press_click.png" id="press_pressed"]
 [ext_resource type="Texture2D" uid="uid://bs4yu5phhjicl" path="res://res/ui/game/switch_squish_1.png" id="s1"]
 [ext_resource type="Script" uid="uid://cff4wlq82jxkj" path="res://scripts/game_screen.gd" id="script"]
 [ext_resource type="Texture2D" uid="uid://b72bbad6fwyb2" path="res://res/ui/home/volume_on.png" id="sound"]
 [ext_resource type="Texture2D" uid="uid://cnkyd2qe61w0e" path="res://res/ui/game/switch_bg.png" id="switch"]
+[ext_resource type="Texture2D" uid="uid://c2f5btu81do1u" path="res://res/ui/game/switch_left.png" id="switch_left"]
+[ext_resource type="Texture2D" uid="uid://l1in063h0uat" path="res://res/ui/game/switch_right.png" id="switch_right"]
+[ext_resource type="Texture2D" uid="uid://bu3iv2reixpkb" path="res://res/ui/game/btn_twist_click.png" id="twist_pressed"]
+[ext_resource type="Theme" uid="uid://djqi100w7gfnm" path="res://resources/ui_theme.tres" id="ui_theme"]
 [ext_resource type="Texture2D" uid="uid://ddolq8fbxvvxn" path="res://res/ui/home/btn_volume.png" id="volume"]
 
 [sub_resource type="StyleBoxEmpty" id="empty"]
+
+[sub_resource type="AtlasTexture" id="switch_left_fitted"]
+atlas = ExtResource("switch_left")
+region = Rect2(9, 2, 565, 211)
+
+[sub_resource type="AtlasTexture" id="switch_right_fitted"]
+atlas = ExtResource("switch_right")
+region = Rect2(9, 2, 565, 211)
 
 [node name="GameScreen" type="Control" unique_id=2120501677]
 layout_mode = 3
@@ -51,6 +66,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 texture = ExtResource("back")
 expand_mode = 1
@@ -95,12 +112,13 @@ vertical_alignment = 1
 
 [node name="SoundButton" type="Button" parent="." unique_id=478836506]
 layout_mode = 0
-anchor_left = 0.67
+anchor_left = 1.0
 anchor_top = 0.04
-anchor_right = 0.67
+anchor_right = 1.0
 anchor_bottom = 0.04
-offset_right = 206.0
-offset_bottom = 74.0
+offset_left = -118.0
+offset_right = -32.0
+offset_bottom = 86.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
@@ -112,15 +130,20 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 texture = ExtResource("volume")
 expand_mode = 1
 
 [node name="Caption" type="Label" parent="SoundButton" unique_id=1248662525]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 text = "有声音"
 horizontal_alignment = 1
@@ -131,10 +154,10 @@ script = ExtResource("anim")
 
 [node name="Icon" type="TextureRect" parent="SoundButton" unique_id=476088093]
 layout_mode = 0
-offset_left = 14.0
-offset_top = 24.0
-offset_right = 48.0
-offset_bottom = 52.0
+offset_left = 22.0
+offset_top = 23.0
+offset_right = 64.0
+offset_bottom = 63.0
 mouse_filter = 2
 texture = ExtResource("sound")
 expand_mode = 1
@@ -142,11 +165,12 @@ expand_mode = 1
 [node name="SceneCaptureButton" type="Button" parent="." unique_id=1356775864]
 layout_mode = 0
 anchor_left = 0.025
-anchor_top = 0.59
+anchor_top = 0.57
 anchor_right = 0.025
-anchor_bottom = 0.59
+anchor_bottom = 0.57
+offset_top = -108.0
 offset_right = 96.0
-offset_bottom = 96.0
+offset_bottom = -12.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
@@ -158,6 +182,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 texture = ExtResource("photo")
 expand_mode = 1
@@ -178,132 +204,174 @@ stretch_mode = 5
 
 [node name="GripButton" type="Button" parent="." unique_id=1221529148]
 layout_mode = 0
-anchor_left = 0.04
-anchor_top = 0.69
-anchor_right = 0.04
-anchor_bottom = 0.69
-offset_right = 200.0
-offset_bottom = 86.0
+anchor_left = 0.28
+anchor_top = 0.765
+anchor_right = 0.72
+anchor_bottom = 0.895
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="PressAnimation" type="Node" parent="GripButton"]
+[node name="PressAnimation" type="Node" parent="GripButton" unique_id=766911390]
 script = ExtResource("anim")
+pressed_texture = ExtResource("pinch_pressed")
 
 [node name="Background" type="TextureRect" parent="GripButton" unique_id=1171797410]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("pink")
+texture = ExtResource("action_pinch")
 expand_mode = 1
+stretch_mode = 5
 
 [node name="Caption" type="Label" parent="GripButton" unique_id=1859667603]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 text = "挤压"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="Icon" type="TextureRect" parent="GripButton" unique_id=335583473]
+layout_mode = 0
+anchor_left = 0.27
+anchor_top = 0.2
+anchor_right = 0.73
+anchor_bottom = 0.8
+mouse_filter = 2
+texture = ExtResource("icon_pinch")
+expand_mode = 1
+stretch_mode = 5
+
 [node name="TwistButton" type="Button" parent="." unique_id=532527323]
 layout_mode = 0
-anchor_left = 0.36
-anchor_top = 0.69
-anchor_right = 0.36
-anchor_bottom = 0.69
-offset_right = 200.0
-offset_bottom = 86.0
+anchor_left = 0.52
+anchor_top = 0.615
+anchor_right = 0.96
+anchor_bottom = 0.745
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="PressAnimation" type="Node" parent="TwistButton"]
+[node name="PressAnimation" type="Node" parent="TwistButton" unique_id=45909191]
 script = ExtResource("anim")
+pressed_texture = ExtResource("twist_pressed")
 
 [node name="Background" type="TextureRect" parent="TwistButton" unique_id=353484155]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("green")
+texture = ExtResource("action_twist")
 expand_mode = 1
+stretch_mode = 5
 
 [node name="Caption" type="Label" parent="TwistButton" unique_id=1584626827]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 text = "扭转"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="FlattenButton" type="Button" parent="."]
+[node name="Icon" type="TextureRect" parent="TwistButton" unique_id=1744752767]
 layout_mode = 0
-anchor_left = 0.68
-anchor_top = 0.69
-anchor_right = 0.68
-anchor_bottom = 0.69
-offset_right = 200.0
-offset_bottom = 86.0
+anchor_left = 0.27
+anchor_top = 0.2
+anchor_right = 0.73
+anchor_bottom = 0.8
+mouse_filter = 2
+texture = ExtResource("icon_twist")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="FlattenButton" type="Button" parent="." unique_id=318734355]
+layout_mode = 0
+anchor_left = 0.04
+anchor_top = 0.615
+anchor_right = 0.48
+anchor_bottom = 0.745
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="PressAnimation" type="Node" parent="FlattenButton"]
+[node name="PressAnimation" type="Node" parent="FlattenButton" unique_id=687353100]
 script = ExtResource("anim")
+pressed_texture = ExtResource("press_pressed")
 
-[node name="Background" type="TextureRect" parent="FlattenButton"]
+[node name="Background" type="TextureRect" parent="FlattenButton" unique_id=1487400410]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("pink")
+texture = ExtResource("action_press")
 expand_mode = 1
+stretch_mode = 5
 
-[node name="Caption" type="Label" parent="FlattenButton"]
+[node name="Caption" type="Label" parent="FlattenButton" unique_id=792115948]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 text = "压扁"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="Icon" type="TextureRect" parent="FlattenButton" unique_id=1695845491]
+layout_mode = 0
+anchor_left = 0.27
+anchor_top = 0.2
+anchor_right = 0.73
+anchor_bottom = 0.8
+mouse_filter = 2
+texture = ExtResource("icon_press")
+expand_mode = 1
+stretch_mode = 5
+
 [node name="ModeBackground" type="TextureRect" parent="." unique_id=1211722179]
 layout_mode = 0
-anchor_left = 0.16
-anchor_top = 0.88
-anchor_right = 0.16
-anchor_bottom = 0.88
-offset_right = 490.0
-offset_bottom = 108.0
+anchor_top = 0.915
+anchor_right = 1.0
+anchor_bottom = 1.0
 mouse_filter = 2
 texture = ExtResource("switch")
 expand_mode = 1
 
 [node name="SquishModeButton" type="Button" parent="." unique_id=793743279]
 layout_mode = 0
-anchor_left = 0.2
-anchor_top = 0.897
-anchor_right = 0.2
-anchor_bottom = 0.897
-offset_right = 205.0
-offset_bottom = 64.0
+anchor_top = 0.915
+anchor_right = 0.5
+anchor_bottom = 1.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
@@ -312,10 +380,21 @@ theme_override_styles/focus = SubResource("empty")
 
 [node name="Background" type="TextureRect" parent="SquishModeButton" unique_id=1729615283]
 layout_mode = 1
-offset_left = 6.0
-offset_top = 4.0
-offset_right = 74.0
-offset_bottom = 60.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("switch_left_fitted")
+expand_mode = 1
+
+[node name="Icon" type="TextureRect" parent="SquishModeButton" unique_id=1840016080]
+layout_mode = 0
+anchor_left = 0.16
+anchor_top = 0.2
+anchor_right = 0.34
+anchor_bottom = 0.8
 mouse_filter = 2
 texture = ExtResource("s1")
 expand_mode = 1
@@ -323,22 +402,21 @@ stretch_mode = 5
 
 [node name="Caption" type="Label" parent="SquishModeButton" unique_id=1147316496]
 layout_mode = 0
-offset_left = 80.0
-offset_top = 6.0
-offset_right = 205.0
-offset_bottom = 60.0
+anchor_left = 0.36
+anchor_right = 0.88
+anchor_bottom = 1.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 28
 text = "捏捏"
+horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="DoodleButton" type="Button" parent="." unique_id=2048543550]
 layout_mode = 0
-anchor_left = 0.52
-anchor_top = 0.897
-anchor_right = 0.52
-anchor_bottom = 0.897
-offset_right = 205.0
-offset_bottom = 64.0
+anchor_left = 0.5
+anchor_top = 0.915
+anchor_right = 1.0
+anchor_bottom = 1.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
@@ -346,11 +424,23 @@ theme_override_styles/hover = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
 [node name="Background" type="TextureRect" parent="DoodleButton" unique_id=623045986]
+visible = false
 layout_mode = 1
-offset_left = 6.0
-offset_top = 4.0
-offset_right = 74.0
-offset_bottom = 60.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("switch_right_fitted")
+expand_mode = 1
+
+[node name="Icon" type="TextureRect" parent="DoodleButton" unique_id=410776340]
+layout_mode = 0
+anchor_left = 0.16
+anchor_top = 0.2
+anchor_right = 0.34
+anchor_bottom = 0.8
 mouse_filter = 2
 texture = ExtResource("d0")
 expand_mode = 1
@@ -358,28 +448,23 @@ stretch_mode = 5
 
 [node name="Caption" type="Label" parent="DoodleButton" unique_id=426531917]
 layout_mode = 0
-offset_left = 80.0
-offset_top = 6.0
-offset_right = 205.0
-offset_bottom = 60.0
+anchor_left = 0.36
+anchor_right = 0.88
+anchor_bottom = 1.0
+theme_override_colors/font_color = Color(0.67451, 0.54902, 0.509804, 1)
 theme_override_font_sizes/font_size = 28
 text = "涂鸦"
+horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Divider" type="ColorRect" parent="." unique_id=1905060711]
-layout_mode = 0
-anchor_left = 0.5
-anchor_top = 0.902
-anchor_right = 0.5
-anchor_bottom = 0.944
-offset_right = 1.0
-mouse_filter = 2
-color = Color(0.9, 0.72, 0.76, 1)
-
-[node name="Edit" parent="." instance=ExtResource("edit")]
+[node name="Edit" parent="." unique_id=2102854467 instance=ExtResource("edit")]
 visible = false
+anchors_preset = 15
+grow_horizontal = 2
+grow_vertical = 2
 
-[node name="WaxButton" type="Button" parent="."]
+[node name="WaxButton" type="Button" parent="." unique_id=834900176]
+visible = false
 layout_mode = 0
 anchor_left = 0.52
 anchor_top = 0.04
@@ -393,27 +478,30 @@ theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="TextureRect" parent="WaxButton"]
+[node name="Background" type="TextureRect" parent="WaxButton" unique_id=2061708733]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 texture = ExtResource("photo")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Caption" type="Label" parent="WaxButton"]
+[node name="Caption" type="Label" parent="WaxButton" unique_id=678641818]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-mouse_filter = 2
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 30
 text = "碎"
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 30
 
-[node name="PressAnimation" type="Node" parent="WaxButton"]
+[node name="PressAnimation" type="Node" parent="WaxButton" unique_id=556259076]
 script = ExtResource("anim")

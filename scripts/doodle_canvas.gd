@@ -2,7 +2,7 @@ extends RefCounted
 
 # Independent UV ink layer; uploaded only once per rendered frame when dirty.
 const SIZE := 1024
-var brush_radius := 5.0
+var brush_radius := 2.5
 var eraser_radius := 15.0
 var radius: float:
 	get:

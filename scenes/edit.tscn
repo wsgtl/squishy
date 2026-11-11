@@ -170,6 +170,9 @@
 [ext_resource type="Texture2D" path="res://res/ui/edit/tool_switch_button_selected.png" id="sticker_apply"]
 [ext_resource type="Texture2D" path="res://res/ui/edit/sticker_slider_knob.svg" id="sticker_knob"]
 
+[ext_resource type="Texture2D" path="res://res/ui/edit/toolbar_background.png" id="toolbar"]
+[ext_resource type="Texture2D" path="res://res/ui/edit/tool_switch_button_selected.png" id="selected_tool"]
+
 [sub_resource type="StyleBoxFlat" id="sticker_track"]
 bg_color = Color(0.98, 0.78, 0.83, 1)
 content_margin_top = 8.0
@@ -178,6 +181,16 @@ corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_left = 8
 corner_radius_bottom_right = 8
+
+
+
+[sub_resource type="AtlasTexture" id="tool_pill"]
+atlas = ExtResource("selected_tool")
+region = Rect2(75, 20, 380, 145)
+
+[sub_resource type="AtlasTexture" id="clear_pill"]
+atlas = ExtResource("a18")
+region = Rect2(18, 38, 915, 130)
 
 [sub_resource type="StyleBoxEmpty" id="empty"]
 
@@ -241,31 +254,36 @@ mouse_filter = 2
 layout_mode = 0
 anchor_left = 0.5
 anchor_right = 0.5
-anchor_top = 0.865
-anchor_bottom = 0.865
+anchor_top = 0.914
+anchor_bottom = 0.914
 offset_left = -342.0
 offset_right = 342.0
-offset_top = -308.0
+offset_top = -375.0
 mouse_filter = 0
 
-[node name="Panel" type="NinePatchRect" parent="Tools"]
+[node name="Panel" type="TextureRect" parent="Tools"]
 layout_mode = 1
-anchor_right = 2.0
-anchor_bottom = 2.0
+anchor_right = 1.0
+anchor_bottom = 1.0
 texture = ExtResource("a2")
 mouse_filter = 2
-scale = Vector2(0.5, 0.5)
-patch_margin_left = 100
-patch_margin_top = 100
-patch_margin_right = 100
-patch_margin_bottom = 100
+expand_mode = 1
+
+[node name="ToolbarBackground" type="TextureRect" parent="Tools"]
+offset_left = 44.0
+offset_top = 48.0
+offset_right = 640.0
+offset_bottom = 118.0
+texture = ExtResource("toolbar")
+expand_mode = 1
+mouse_filter = 2
 
 [node name="Brush" type="Button" parent="Tools"]
 layout_mode = 0
-offset_left = 25.0
-offset_top = 22.0
-offset_right = 230.0
-offset_bottom = 84.0
+offset_left = 44.0
+offset_top = 48.0
+offset_right = 242.0
+offset_bottom = 118.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
@@ -273,45 +291,54 @@ theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="NinePatchRect" parent="Tools/Brush"]
+[node name="Background" type="TextureRect" parent="Tools/Brush"]
 layout_mode = 1
-anchor_right = 2.0
-anchor_bottom = 2.0
-texture = ExtResource("a3")
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = SubResource("tool_pill")
 mouse_filter = 2
-scale = Vector2(0.5, 0.5)
-patch_margin_left = 56
-patch_margin_top = 56
-patch_margin_right = 56
-patch_margin_bottom = 56
+expand_mode = 1
+stretch_mode = 0
+visible = false
+offset_left = -10.0
+offset_right = 10.0
+offset_top = -9.0
+offset_bottom = 9.0
 
-[node name="Icon" type="TextureRect" parent="Tools/Brush"]
-layout_mode = 0
-offset_left = 12.0
-offset_top = 8.0
-offset_right = 65.0
-offset_bottom = 54.0
+[node name="Content" type="CenterContainer" parent="Tools/Brush"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="Tools/Brush/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Icon" type="TextureRect" parent="Tools/Brush/Content/Row"]
+layout_mode = 2
+custom_minimum_size = Vector2(46, 46)
+size_flags_vertical = 4
 texture = ExtResource("a4")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="Caption" type="Label" parent="Tools/Brush"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 62.0
+[node name="Caption" type="Label" parent="Tools/Brush/Content/Row"]
+layout_mode = 2
 mouse_filter = 2
 text = "涂鸦"
 horizontal_alignment = 1
 vertical_alignment = 1
+theme_override_font_sizes/font_size = 28
 
 [node name="Sticker" type="Button" parent="Tools"]
 layout_mode = 0
-offset_left = 238.0
-offset_top = 22.0
-offset_right = 443.0
-offset_bottom = 84.0
+offset_left = 242.0
+offset_top = 48.0
+offset_right = 440.0
+offset_bottom = 118.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
@@ -319,45 +346,54 @@ theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="NinePatchRect" parent="Tools/Sticker"]
+[node name="Background" type="TextureRect" parent="Tools/Sticker"]
 layout_mode = 1
-anchor_right = 2.0
-anchor_bottom = 2.0
-texture = ExtResource("a3")
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = SubResource("tool_pill")
 mouse_filter = 2
-scale = Vector2(0.5, 0.5)
-patch_margin_left = 56
-patch_margin_top = 56
-patch_margin_right = 56
-patch_margin_bottom = 56
+expand_mode = 1
+stretch_mode = 0
+visible = false
+offset_left = -10.0
+offset_right = 10.0
+offset_top = -9.0
+offset_bottom = 9.0
 
-[node name="Icon" type="TextureRect" parent="Tools/Sticker"]
-layout_mode = 0
-offset_left = 12.0
-offset_top = 8.0
-offset_right = 65.0
-offset_bottom = 54.0
+[node name="Content" type="CenterContainer" parent="Tools/Sticker"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="Tools/Sticker/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Icon" type="TextureRect" parent="Tools/Sticker/Content/Row"]
+layout_mode = 2
+custom_minimum_size = Vector2(36, 36)
+size_flags_vertical = 4
 texture = ExtResource("a5")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="Caption" type="Label" parent="Tools/Sticker"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 62.0
+[node name="Caption" type="Label" parent="Tools/Sticker/Content/Row"]
+layout_mode = 2
 mouse_filter = 2
 text = "贴纸"
 horizontal_alignment = 1
 vertical_alignment = 1
+theme_override_font_sizes/font_size = 28
 
 [node name="Eraser" type="Button" parent="Tools"]
 layout_mode = 0
-offset_left = 451.0
-offset_top = 22.0
-offset_right = 656.0
-offset_bottom = 84.0
+offset_left = 440.0
+offset_top = 48.0
+offset_right = 638.0
+offset_bottom = 118.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
@@ -365,45 +401,54 @@ theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="NinePatchRect" parent="Tools/Eraser"]
+[node name="Background" type="TextureRect" parent="Tools/Eraser"]
 layout_mode = 1
-anchor_right = 2.0
-anchor_bottom = 2.0
-texture = ExtResource("a3")
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = SubResource("tool_pill")
 mouse_filter = 2
-scale = Vector2(0.5, 0.5)
-patch_margin_left = 56
-patch_margin_top = 56
-patch_margin_right = 56
-patch_margin_bottom = 56
+expand_mode = 1
+stretch_mode = 0
+visible = false
+offset_left = -10.0
+offset_right = 10.0
+offset_top = -9.0
+offset_bottom = 9.0
 
-[node name="Icon" type="TextureRect" parent="Tools/Eraser"]
-layout_mode = 0
-offset_left = 12.0
-offset_top = 8.0
-offset_right = 65.0
-offset_bottom = 54.0
+[node name="Content" type="CenterContainer" parent="Tools/Eraser"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="Tools/Eraser/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Icon" type="TextureRect" parent="Tools/Eraser/Content/Row"]
+layout_mode = 2
+custom_minimum_size = Vector2(36, 36)
+size_flags_vertical = 4
 texture = ExtResource("a6")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="Caption" type="Label" parent="Tools/Eraser"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 62.0
+[node name="Caption" type="Label" parent="Tools/Eraser/Content/Row"]
+layout_mode = 2
 mouse_filter = 2
 text = "橡皮擦"
 horizontal_alignment = 1
 vertical_alignment = 1
+theme_override_font_sizes/font_size = 28
 
 [node name="Sizes" type="Control" parent="Tools"]
 layout_mode = 0
 offset_left = 35.0
-offset_top = 104.0
+offset_top = 168.0
 offset_right = 650.0
-offset_bottom = 168.0
+offset_bottom = 234.0
 mouse_filter = 2
 
 [node name="Size0" type="Button" parent="Tools/Sizes"]
@@ -508,9 +553,9 @@ mouse_filter = 2
 [node name="Colors" type="Control" parent="Tools"]
 layout_mode = 0
 offset_left = 22.0
-offset_top = 190.0
+offset_top = 290.0
 offset_right = 665.0
-offset_bottom = 254.0
+offset_bottom = 354.0
 mouse_filter = 2
 
 [node name="Color0" type="Button" parent="Tools/Colors"]
@@ -537,7 +582,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color0"]
 visible = true
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -545,20 +589,6 @@ offset_right = 6.0
 offset_bottom = 6.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color0/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
 texture = ExtResource("a10")
 expand_mode = 1
 stretch_mode = 5
@@ -588,7 +618,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color1"]
 visible = false
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -596,20 +625,6 @@ offset_right = 6.0
 offset_bottom = 6.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color1/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
 texture = ExtResource("a10")
 expand_mode = 1
 stretch_mode = 5
@@ -639,7 +654,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color2"]
 visible = false
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -647,20 +661,6 @@ offset_right = 6.0
 offset_bottom = 6.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color2/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
 texture = ExtResource("a10")
 expand_mode = 1
 stretch_mode = 5
@@ -690,7 +690,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color3"]
 visible = false
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -698,20 +697,6 @@ offset_right = 6.0
 offset_bottom = 6.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color3/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
 texture = ExtResource("a10")
 expand_mode = 1
 stretch_mode = 5
@@ -741,7 +726,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color4"]
 visible = false
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -749,20 +733,6 @@ offset_right = 6.0
 offset_bottom = 6.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color4/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
 texture = ExtResource("a10")
 expand_mode = 1
 stretch_mode = 5
@@ -792,7 +762,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color5"]
 visible = false
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -800,20 +769,6 @@ offset_right = 6.0
 offset_bottom = 6.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color5/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
 texture = ExtResource("a10")
 expand_mode = 1
 stretch_mode = 5
@@ -843,7 +798,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color6"]
 visible = false
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -851,20 +805,6 @@ offset_right = 6.0
 offset_bottom = 6.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color6/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
 texture = ExtResource("a10")
 expand_mode = 1
 stretch_mode = 5
@@ -894,7 +834,6 @@ mouse_filter = 2
 
 [node name="Ring" type="TextureRect" parent="Tools/Colors/Color7"]
 visible = false
-self_modulate = Color(1, 0.65, 0.70, 1)
 layout_mode = 1
 offset_left = -6.0
 offset_top = -6.0
@@ -907,27 +846,13 @@ expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="InnerRing" type="TextureRect" parent="Tools/Colors/Color7/Ring"]
-layout_mode = 1
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 5.0
-offset_top = 5.0
-offset_right = -5.0
-offset_bottom = -5.0
-top_level = false
-texture = ExtResource("a10")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
 [node name="Clear" type="Button" parent="Tools"]
 visible = false
 layout_mode = 0
-offset_left = 30.0
-offset_top = 190.0
-offset_right = 650.0
-offset_bottom = 252.0
+offset_left = 44.0
+offset_top = 284.0
+offset_right = 640.0
+offset_bottom = 362.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
@@ -935,24 +860,21 @@ theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="NinePatchRect" parent="Tools/Clear"]
+[node name="Background" type="TextureRect" parent="Tools/Clear"]
 layout_mode = 1
-anchor_right = 2.0
-anchor_bottom = 2.0
-scale = Vector2(0.5, 0.5)
-texture = ExtResource("a18")
-patch_margin_left = 60
-patch_margin_top = 60
-patch_margin_right = 60
-patch_margin_bottom = 60
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = SubResource("clear_pill")
+expand_mode = 1
+stretch_mode = 0
 mouse_filter = 2
 
 [node name="Icon" type="TextureRect" parent="Tools/Clear"]
 layout_mode = 0
-offset_left = 28.0
-offset_top = 8.0
-offset_right = 76.0
-offset_bottom = 54.0
+offset_left = 45.0
+offset_top = 18.0
+offset_right = 77.0
+offset_bottom = 60.0
 texture = ExtResource("a19")
 expand_mode = 1
 stretch_mode = 5
@@ -967,14 +889,15 @@ mouse_filter = 2
 text = "清除"
 horizontal_alignment = 1
 vertical_alignment = 1
+theme_override_colors/font_color = Color(0.76, 0.47, 0.55, 1)
 
 [node name="Stickers" type="ScrollContainer" parent="Tools"]
 visible = false
 layout_mode = 0
 offset_left = 25.0
-offset_top = 96.0
+offset_top = 140.0
 offset_right = 660.0
-offset_bottom = 265.0
+offset_bottom = 374.0
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 3
 
@@ -1459,47 +1382,47 @@ mouse_filter = 1
 
 [node name="StickerActions" type="Control" parent="."]
 layout_mode = 1
-anchor_left = 0.17
+anchor_left = 0.05
 anchor_right = 0.95
-anchor_top = 0.865
-anchor_bottom = 0.865
-offset_top = -420.0
-offset_bottom = -320.0
+anchor_top = 0.914
+anchor_bottom = 0.914
+offset_top = -475.0
+offset_bottom = -390.0
 visible = false
-mouse_filter = 0
+mouse_filter = 2
 
 [node name="Apply" type="Button" parent="StickerActions"]
 layout_mode = 1
-anchor_top = 0.36
+anchor_top = 0.30
 anchor_bottom = 0.94
-anchor_right = 0.18
+anchor_right = 0.24
 focus_mode = 0
 text = "确认"
-theme_override_font_sizes/font_size = 24
-theme_override_colors/font_color = Color(0.65, 0.30, 0.38, 1)
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="NinePatchRect" parent="StickerActions/Apply"]
+[node name="Background" type="TextureRect" parent="StickerActions/Apply"]
 layout_mode = 1
-anchor_right = 2.0
-anchor_bottom = 2.0
-scale = Vector2(0.5, 0.5)
-texture = ExtResource("sticker_apply")
-patch_margin_left = 56
-patch_margin_top = 56
-patch_margin_right = 56
-patch_margin_bottom = 56
+anchor_right = 1.0
+anchor_bottom = 1.0
+texture = SubResource("tool_pill")
+expand_mode = 1
+stretch_mode = 0
 show_behind_parent = true
 mouse_filter = 2
 
 [node name="SizeLabel" type="Label" parent="StickerActions"]
 layout_mode = 1
-anchor_left = 0.23
-anchor_right = 0.59
-anchor_bottom = 0.32
+anchor_left = 0.30
+anchor_right = 0.62
+anchor_top = 0.16
+anchor_bottom = 0.48
 text = "缩放"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -1509,8 +1432,8 @@ mouse_filter = 2
 
 [node name="Size" type="HSlider" parent="StickerActions"]
 layout_mode = 1
-anchor_left = 0.23
-anchor_right = 0.59
+anchor_left = 0.30
+anchor_right = 0.62
 anchor_top = 0.32
 anchor_bottom = 1.0
 min_value = 32.0
@@ -1524,9 +1447,10 @@ theme_override_icons/grabber_highlight = ExtResource("sticker_knob")
 
 [node name="RotationLabel" type="Label" parent="StickerActions"]
 layout_mode = 1
-anchor_left = 0.64
+anchor_left = 0.68
 anchor_right = 1
-anchor_bottom = 0.32
+anchor_top = 0.16
+anchor_bottom = 0.48
 text = "角度"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -1536,7 +1460,7 @@ mouse_filter = 2
 
 [node name="Rotation" type="HSlider" parent="StickerActions"]
 layout_mode = 1
-anchor_left = 0.64
+anchor_left = 0.68
 anchor_right = 1
 anchor_top = 0.32
 anchor_bottom = 1.0
@@ -2183,4 +2107,5 @@ offset_bottom = 62.0
 text = "笔刷"
 vertical_alignment = 1
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.78, 0.58, 0.57, 1)
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 30

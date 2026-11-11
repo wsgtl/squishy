@@ -9,6 +9,10 @@ uniform bool has_doodle_texture = false;
 uniform sampler2D normal_texture : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform bool has_normal_texture = false;
 uniform float normal_strength = 1.0;
+uniform bool diagnostic_rest_normal = false;
+uniform bool diagnostic_normal_color = false;
+uniform bool diagnostic_triangle_normal = false;
+varying highp vec3 diagnostic_view_position;
 uniform float material_roughness = 0.6;
 uniform float material_metallic = 0.0;
 uniform float material_specular : hint_range(0.0, 1.0) = 0.5;
@@ -150,7 +154,7 @@ vec3 grip_offset(vec3 p) {
 	if (flatten_mode) {
 		float amount=min(grip_amount*flatten_strength,1.0);
 		if (amount<0.0) {
-			amount=amount*0.65+amount*0.35/sqrt(1.0+pow(amount/0.15,2.0));
+			amount=amount*0.65+amount*0.35/sqrt(1.0+((amount/0.15)*(amount/0.15)));
 		}
 		float bottom=model_center.y-model_size.y*0.5;
 		float spread=inversesqrt(1.0-0.55*amount)-1.0;
@@ -159,7 +163,7 @@ vec3 grip_offset(vec3 p) {
 		vec2 normalized_xz=(p.xz-model_center.xz)/max(model_size.xz*0.5,vec2(0.00001));
 		float radial=length(normalized_xz);
 		float center_dent=exp(-radial*radial/0.30);
-		float rim=exp(-pow((radial-0.82)/0.30,2.0));
+		float rim=exp(-(((radial-0.82)/0.30)*((radial-0.82)/0.30)));
 		float top_weight=smoothstep(0.25,1.0,level);
 		float profile=sin(3.14159265359*level);
 		float outward=spread+amount*0.10*profile*(0.4+0.6*rim);
@@ -229,8 +233,7 @@ vec3 wax_offset(vec3 p) {
 	return wax_bend*local_weight+axis*radial*opposite_weight*0.30-transverse*contraction;
 }
 
-vec3 deform(vec3 p, out vec3 contact_offset) {
-	vec3 relative = p - anchor_point;
+vec3 contact_at(vec3 p) {
 	vec3 offset = vec3(0.0);
 	// A zero pressure is a valid zero displacement, not a different code path.
 	offset = dent_at(p, anchor_point, anchor_normal, press_amount);
@@ -264,7 +267,12 @@ vec3 deform(vec3 p, out vec3 contact_offset) {
 		vec3 grab_b = grab_dent(p, grab_point_b, grab_normal_b);
 		offset += dot(grab_a, grab_a) >= dot(grab_b, grab_b) ? grab_a : grab_b;
 	}
-	contact_offset = offset * (grip_held ? (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) : 1.0);
+	return offset;
+}
+
+vec3 deform(vec3 p, vec3 contact) {
+	vec3 relative = p - anchor_point;
+	vec3 offset = contact;
 	float bottom = model_center.y - model_size.y * 0.5;
 	float squash = clamp(squash_amount * squash_strength, -0.04, 0.18);
 	float spread = inversesqrt(1.0 - squash) - 1.0;
@@ -311,35 +319,52 @@ void vertex() {
 	// vertex uploads or surface allocations are needed while interacting.
 	vec3 p = VERTEX;
 	vec3 n = normalize(NORMAL);
-	vec3 reference = abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-	vec3 t = normalize(cross(reference, n));
-	vec3 b = cross(n, t);
 	// Geometry derivatives must not change direction across mirrored UV islands.
 	vec3 source_tangent = TANGENT;
 	vec3 source_binormal = BINORMAL;
-	float epsilon = model_radius * 0.002;
-	vec3 contact_offset;
-	vec3 scratch_offset;
-	vec3 deformed = deform(p, contact_offset);
+	highp float epsilon = max(model_radius * 0.004, 0.00001);
+	vec3 contact = contact_at(p);
+	vec3 contact_offset = contact * (grip_held ? (1.0 - clamp(grip_amount * 1.5, 0.0, 1.0)) : 1.0);
+	vec3 deformed = deform(p, contact);
 	// Use only local press displacement: global squash and stretch must not
 	// darken the whole object. Reuse the field evaluation already used to render.
 	float contact_radius = model_radius * finger_width * (0.85 + softness * 0.25);
 	float inward_depth = max(-dot(contact_offset, n), 0.0);
 	dent_shadow = 1.0 - exp(-inward_depth / max(contact_radius, 1e-6));
-	// Normalize the difference scale BEFORE the cross product. Otherwise its
-	// squared magnitude scales with epsilon^4 and can underflow on mobile GPUs.
-	vec3 dt = (deform(p + t * epsilon, scratch_offset) - deformed) / epsilon;
-	vec3 db = (deform(p + b * epsilon, scratch_offset) - deformed) / epsilon;
-	vec3 new_normal = cross(dt, db);
-	float normal_length_squared = dot(new_normal, new_normal);
+	// A common Cartesian stencil avoids switching sample planes at normal.y=0.9.
+	// The cofactor transports oriented area normals, including large rotations.
+	highp vec3 ex = vec3(epsilon, 0.0, 0.0);
+	highp vec3 ey = vec3(0.0, epsilon, 0.0);
+	highp vec3 ez = vec3(0.0, 0.0, epsilon);
+	highp vec3 x_plus = deform(p + ex, contact_at(p + ex));
+	highp vec3 x_minus = deform(p - ex, contact_at(p - ex));
+	highp vec3 jx = (x_plus - x_minus) / (2.0 * epsilon);
+	highp vec3 y_plus = deform(p + ey, contact_at(p + ey));
+	highp vec3 y_minus = deform(p - ey, contact_at(p - ey));
+	highp vec3 jy = (y_plus - y_minus) / (2.0 * epsilon);
+	highp vec3 z_plus = deform(p + ez, contact_at(p + ez));
+	highp vec3 z_minus = deform(p - ez, contact_at(p - ez));
+	highp vec3 jz = (z_plus - z_minus) / (2.0 * epsilon);
+	highp float derivative_scale = max(length(jx), max(length(jy), length(jz)));
 	NORMAL = n;
-	if (normal_length_squared > 0.000001) {
-		NORMAL = new_normal * inversesqrt(normal_length_squared);
+	if (derivative_scale > 0.000001 && derivative_scale < 1.0e6) {
+		highp vec3 ax = jx / derivative_scale;
+		highp vec3 ay = jy / derivative_scale;
+		highp vec3 az = jz / derivative_scale;
+		highp vec3 transported = cross(ay, az) * n.x + cross(az, ax) * n.y + cross(ax, ay) * n.z;
+		highp float normal_squared = dot(transported, transported);
+		if (normal_squared > 1.0e-12 && normal_squared < 10.0) {
+			NORMAL = transported * inversesqrt(normal_squared);
+		}
+	} else {
+		jx = vec3(1.0, 0.0, 0.0);
+		jy = vec3(0.0, 1.0, 0.0);
+		jz = vec3(0.0, 0.0, 1.0);
 	}
 	if (has_normal_texture) {
 		// Transport the authored UV frame through the same surface derivatives.
 		// Preserve mirrored-island handedness without using it for geometry normals.
-		vec3 deformed_tangent = dt * dot(source_tangent, t) + db * dot(source_tangent, b);
+		vec3 deformed_tangent = jx * source_tangent.x + jy * source_tangent.y + jz * source_tangent.z;
 		vec3 tangent_projected = deformed_tangent - NORMAL * dot(NORMAL, deformed_tangent);
 		float tangent_length_squared = dot(tangent_projected, tangent_projected);
 		vec3 fallback_reference = abs(NORMAL.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
@@ -347,10 +372,32 @@ void vertex() {
 		float handedness = dot(cross(source_tangent, source_binormal), n) < 0.0 ? -1.0 : 1.0;
 		BINORMAL = normalize(cross(NORMAL, TANGENT)) * handedness;
 	}
+	if (diagnostic_rest_normal) {
+		NORMAL = n;
+		TANGENT = source_tangent;
+		BINORMAL = source_binormal;
+	}
+	diagnostic_view_position = (MODELVIEW_MATRIX * vec4(deformed, 1.0)).xyz;
 	VERTEX = deformed;
 }
 
 void fragment() {
+	// Independent reference: use only the rendered triangle, never the field's
+	// numerical derivatives, authored normal or transported tangent frame.
+	if (diagnostic_triangle_normal) {
+		highp vec3 dx = dFdx(diagnostic_view_position);
+		highp vec3 dy = dFdy(diagnostic_view_position);
+		highp float scale = max(max(abs(dx.x), max(abs(dx.y), abs(dx.z))), max(abs(dy.x), max(abs(dy.y), abs(dy.z))));
+		if (scale > 0.0) {
+			highp vec3 face = cross(dx / scale, dy / scale);
+			highp float face_squared = dot(face, face);
+			if (face_squared > 1.0e-12) {
+				face *= inversesqrt(face_squared);
+				NORMAL = dot(face, VIEW) < 0.0 ? -face : face;
+			}
+		}
+	}
+
 	vec4 color = base_color;
 	if (has_albedo_texture) {
 		color *= texture(albedo_texture, UV);
@@ -359,7 +406,7 @@ void fragment() {
 		vec4 ink = texture(doodle_texture, UV);
 		color.rgb = mix(color.rgb, ink.rgb, ink.a);
 	}
-	float cavity = clamp(dent_shadow, 0.0, 1.0) * dent_shadow_strength;
+	float cavity = diagnostic_triangle_normal ? 0.0 : clamp(dent_shadow, 0.0, 1.0) * dent_shadow_strength;
 	ALBEDO = color.rgb * (1.0 - cavity);
 	AO = 1.0 - cavity;
 	AO_LIGHT_AFFECT = 0.35;
@@ -367,7 +414,20 @@ void fragment() {
 		NORMAL_MAP = texture(normal_texture, UV).rgb;
 		NORMAL_MAP_DEPTH = normal_strength;
 	}
+	if (diagnostic_triangle_normal) {
+		NORMAL_MAP = vec3(0.5, 0.5, 1.0);
+		NORMAL_MAP_DEPTH = 0.0;
+	}
 	ROUGHNESS = material_roughness;
 	METALLIC = material_metallic;
 	SPECULAR = material_specular;
+	if (diagnostic_normal_color) {
+		// View-space geometry normal, before normal-map lighting. Emission bypasses
+		// direct lights and cast shadows, isolating the actual normal direction.
+		EMISSION = normalize(NORMAL) * 0.5 + 0.5;
+		ALBEDO = vec3(0.0);
+		METALLIC = 0.0;
+		SPECULAR = 0.0;
+		AO = 1.0;
+	}
 }

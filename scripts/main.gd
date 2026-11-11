@@ -96,7 +96,7 @@ var _param_visible := false
 # 镜头后退程度 (0-1.5, 默认1)
 var _camera_retract: float = 1.0
 const GAME_VIEW_SCALE := 1.2
-const HOME_VIEW_UP_RATIO := 0.09
+const HOME_VIEW_UP_RATIO := 0.065
 const GAME_VIEW_UP_RATIO := 0.12
 var _page_start_v_offset := 0.0
 var _home_camera_dist: float = 4.5
@@ -111,9 +111,12 @@ const BOARD_DIAMETER := MODEL_WIDTH * 1.65
 
 # 字体
 var _cjk_font: FontFile
+const WAX_MODE_ENABLED := false
 var _wax_mode: Node3D
 
 func _toggle_wax_mode() -> void:
+	if not WAX_MODE_ENABLED and _wax_mode == null:
+		return
 	_finish_gesture()
 	_blob.cancel_grip()
 	_blob.reset_deformation()
@@ -534,7 +537,7 @@ func _build_environment() -> void:
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color("#f8c5cc")
+	environment.background_color = Color("#e9dfff")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color("#ffffff")
 	environment.ambient_light_energy = 0.24

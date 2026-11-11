@@ -14,6 +14,9 @@ var filename := ""
 var busy := false
 var dialog: FileDialog
 var _web_status_elapsed := 0.0
+var _render_diagnostic_elapsed := 0.0
+var _render_diagnostic_mask := -1
+var _render_diagnostic_blob_id := 0
 var _last_target_diagnostics := ""
 var _capture_viewport: SubViewport
 var _capture_camera: Camera3D
@@ -124,7 +127,6 @@ func capture_scene() -> void:
 			break
 	_capture_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	if captured != null and not captured.is_empty():
-		captured = crop_center(captured, preview.size)
 		captured.convert(Image.FORMAT_RGB8)
 		jpeg = _encode_capture_jpeg(captured)
 		_capture_log("capture.encoded", {"size": str(captured.get_size()), "jpeg_bytes": jpeg.size(), "preview_size": str(preview.size)})
@@ -213,6 +215,7 @@ func share_image(platform: String) -> void:
 		status.text = tr("当前桌面版不支持系统分享，请使用保存。")
 
 func _process(delta: float) -> void:
+	_update_render_diagnostics(delta)
 	if not OS.has_feature("web") or not is_open():
 		return
 	_sync_web_share_targets()
@@ -223,6 +226,28 @@ func _process(delta: float) -> void:
 	var message = JavaScriptBridge.eval("window.punikkoPhoto ? window.punikkoPhoto.takeMessage() : ''")
 	if message is String and not message.is_empty():
 		status.text = message
+
+# Poll a tiny bitmask, including when the photo dialog is closed.
+func _update_render_diagnostics(delta: float) -> void:
+	if not OS.has_feature("web") or not is_instance_valid(host):
+		return
+	_render_diagnostic_elapsed += delta
+	if _render_diagnostic_elapsed < 0.2:
+		return
+	_render_diagnostic_elapsed = 0.0
+	var value: Variant = JavaScriptBridge.eval("window.punikkoRenderTestMask || 0")
+	if value == null:
+		return
+	var mask := int(value)
+	var blob: Node = host.get("_blob")
+	var blob_id := blob.get_instance_id() if is_instance_valid(blob) else 0
+	if mask == _render_diagnostic_mask and blob_id == _render_diagnostic_blob_id:
+		return
+	_render_diagnostic_mask = mask
+	_render_diagnostic_blob_id = blob_id
+	if is_instance_valid(blob):
+		blob.set_diagnostic_surface_mode((mask & 4) != 0, (mask & 16) != 0, (mask & 32) != 0)
+	JavaScriptBridge.eval("window.punikkoShareLog && window.punikkoShareLog('render.test_applied', %s)" % JSON.stringify({"rest_normal": (mask & 4) != 0, "normal_color": (mask & 16) != 0, "triangle_normal": (mask & 32) != 0, "blob_id": blob_id}))
 
 func _sync_web_share_targets() -> void:
 	var targets: Array = []
@@ -357,16 +382,18 @@ const WEB_BRIDGE := """
 # Temporary on-device diagnostics. Never stores image bytes or sends logs anywhere.
 const WEB_DIAGNOSTICS := """
 (() => {
- if(window.punikkoShareLog) return;
- const rows=[];
+ const existing=document.getElementById('punikko-diagnostics');
+ if(existing){existing.hidden=false;return;}
+ const boot=document.getElementById('punikko-debug-boot');if(boot)boot.remove();
+ const rows=window.punikkoDiagnosticRows||(window.punikkoDiagnosticRows=[]);
  window.punikkoShareLog=(event,data={})=>{
   const row={time:new Date().toISOString(),event,...data};
   rows.push(row); if(rows.length>400) rows.shift();
   console.info('[PunikkoShare]',JSON.stringify(row));
  };
- const panel=document.createElement('details');
+ const panel=document.createElement('details');panel.id='punikko-diagnostics';
  panel.style.cssText='position:fixed;right:8px;top:8px;z-index:2147483647;max-width:90vw;background:#fff;color:#333;padding:6px;border:1px solid #aaa;border-radius:6px;font:12px sans-serif';
- const title=document.createElement('summary');title.textContent='分享诊断 / Share log';panel.append(title);
+ const title=document.createElement('summary');title.textContent='手机诊断 / Debug log';panel.append(title);
  const area=document.createElement('textarea');area.readOnly=true;
  area.style.cssText='display:block;width:75vw;max-width:480px;height:230px;font:11px monospace;user-select:text;touch-action:auto';panel.append(area);
  const refresh=()=>{area.value=rows.map(r=>JSON.stringify(r)).join(String.fromCharCode(10));};
@@ -374,13 +401,82 @@ const WEB_DIAGNOSTICS := """
  const copy=document.createElement('button');copy.textContent='复制日志 / Copy';
  copy.onclick=async()=>{
   refresh();const text=area.value;
-  try{await navigator.clipboard.writeText(text);copy.textContent='已复制 / Copied';}
+  try{await navigator.clipboard.writeText(text);copy.textContent='已复制 '+text.length+' 字符';}
   catch(e){area.focus();area.select();copy.textContent=document.execCommand('copy')?'已复制 / Copied':'请长按文本复制 / Select text';}
  };panel.append(copy);
+
+ const download=document.createElement('button');download.textContent='下载完整日志';
+ download.onclick=()=>{
+  const content=rows.map(r=>JSON.stringify(r)).join(String.fromCharCode(10));
+  const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url;link.download='punikko-diagnostics-'+Date.now()+'.jsonl';
+  document.body.appendChild(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+ };panel.appendChild(download);
+
  const update=document.createElement('button');update.textContent='刷新 / Refresh';update.onclick=refresh;panel.append(update);
- panel.hidden=true;
+ panel.hidden=false;
  document.body.append(panel);
- window.punikkoShareLog('diagnostics.ready',{build:'share-debug-4'});
+
+ // Keep diagnostics inside both the portrait game area and the visible viewport.
+ if(!window.punikkoPlaceDiagnostics){
+  window.punikkoPlaceDiagnostics=function(){
+   var p=document.getElementById('punikko-diagnostics')||document.getElementById('punikko-debug-boot');if(!p)return;
+   var v=window.visualViewport, vx=v?v.offsetLeft:0, vy=v?v.offsetTop:0;
+   var vw=v?v.width:window.innerWidth, vh=v?v.height:window.innerHeight;
+   var c=document.getElementById('canvas'), r=c?c.getBoundingClientRect():{left:vx,top:vy,width:vw,height:vh};
+   var gameWidth=Math.min(r.width,r.height*720/1280);
+   var left=Math.max(vx,r.left+(r.width-gameWidth)/2), right=Math.min(vx+vw,r.left+(r.width+gameWidth)/2);
+   if(right-left<100){left=vx;right=vx+vw;}
+   p.style.boxSizing='border-box';p.style.right='auto';p.style.maxWidth=Math.max(80,right-left-16)+'px';
+   p.style.maxHeight=Math.max(60,vh-16)+'px';p.style.overflow='auto';p.style.touchAction='auto';
+   var area=p.querySelector('textarea');if(area){area.style.width='min(480px, 70vw)';area.style.maxWidth='100%';area.style.boxSizing='border-box';}
+   p.style.left=Math.max(left+8,right-8-p.getBoundingClientRect().width)+'px';
+   p.style.top=Math.max(vy+8,r.top+8)+'px';
+  };
+  window.addEventListener('resize',window.punikkoPlaceDiagnostics);
+  if(window.visualViewport){window.visualViewport.addEventListener('resize',window.punikkoPlaceDiagnostics);window.visualViewport.addEventListener('scroll',window.punikkoPlaceDiagnostics);}
+  var diagnosticCanvas=document.getElementById('canvas');
+  if(diagnosticCanvas&&window.ResizeObserver)new ResizeObserver(window.punikkoPlaceDiagnostics).observe(diagnosticCanvas);
+ }
+ panel.addEventListener('toggle',window.punikkoPlaceDiagnostics);
+ window.punikkoPlaceDiagnostics();
+
+ window.punikkoShareLog('diagnostics.ready',{build:'render-debug-10',agent:navigator.userAgent,dpr:window.devicePixelRatio});
+ window.punikkoRenderTestMask=0;
+ const tests=document.createElement('div');panel.append(tests);
+ const switches=[];
+ for(const [bit,caption] of [[4,'使用未形变法线（诊断）'],[16,'法线方向着色'],[32,'实际三角形法线（对照）']]){
+  const label=document.createElement('label');label.style.cssText='display:block;padding:6px';
+  const input=document.createElement('input');input.type='checkbox';switches.push(input);
+  input.onchange=()=>{
+   window.punikkoRenderTestMask=input.checked?(window.punikkoRenderTestMask|bit):(window.punikkoRenderTestMask&~bit);
+   window.punikkoShareLog('render.test_requested',{mask:window.punikkoRenderTestMask});refresh();
+  };
+  label.append(input,document.createTextNode(caption));tests.append(label);
+ }
+ const mark=document.createElement('button');mark.textContent='标记阴影异常';
+ mark.onclick=()=>{window.punikkoShareLog('render.anomaly',{mask:window.punikkoRenderTestMask,latest:window.punikkoRenderLatest||null});refresh();};panel.append(mark);
+ // Inspect the existing engine context only; never create a second context,
+ // consume GL errors, compile shaders or change render state.
+ const canvas=document.getElementById('canvas');
+ if(canvas){
+  canvas.addEventListener('webglcontextlost',()=>window.punikkoShareLog('render.context_lost'));
+  canvas.addEventListener('webglcontextrestored',()=>window.punikkoShareLog('render.context_restored'));
+  try{
+   const gl=canvas.getContext('webgl2');
+   if(gl){
+    const ext=gl.getExtension('WEBGL_debug_renderer_info');
+    const precision={};
+    for(const stage of ['VERTEX_SHADER','FRAGMENT_SHADER']) for(const kind of ['HIGH_FLOAT','MEDIUM_FLOAT']){
+     const p=gl.getShaderPrecisionFormat(gl[stage],gl[kind]);
+     precision[stage+'.'+kind]=p?{min:p.rangeMin,max:p.rangeMax,bits:p.precision}:null;
+    }
+    window.punikkoShareLog('render.device',{version:gl.getParameter(gl.VERSION),shading:gl.getParameter(gl.SHADING_LANGUAGE_VERSION),vendor:gl.getParameter(ext?ext.UNMASKED_VENDOR_WEBGL:gl.VENDOR),renderer:gl.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:gl.RENDERER),attributes:gl.getContextAttributes(),precision});
+   }else window.punikkoShareLog('render.device_unavailable');
+  }catch(e){window.punikkoShareLog('render.device_error',{message:String(e)});}
+ }
 })();
 """
 

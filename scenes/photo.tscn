@@ -1,390 +1,402 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://b1cxafncrdali"]
 
-[ext_resource type="Theme" path="res://resources/ui_theme.tres" id="ui_theme"]
+[ext_resource type="Script" uid="uid://co6q8skxdnotk" path="res://scripts/button_press_animation.gd" id="anim"]
+[ext_resource type="Texture2D" uid="uid://cgwhoe35f4erx" path="res://res/ui/photo/btn_cancel.png" id="btn_cancel"]
+[ext_resource type="Texture2D" uid="uid://caguimgt4qwr5" path="res://res/ui/photo/btn_save.png" id="btn_save"]
+[ext_resource type="Texture2D" uid="uid://lk18gtwbepcl" path="res://res/ui/photo/dialog_panel.png" id="dialog_panel"]
+[ext_resource type="Texture2D" uid="uid://bqdujumip1u7m" path="res://res/ui/photo/ic_save.png" id="ic_save"]
+[ext_resource type="Shader" uid="uid://ya23bff1f6n8" path="res://shaders/photo_rounded_mask.gdshader" id="rounded_mask"]
+[ext_resource type="Script" uid="uid://bli262vohxgcr" path="res://scripts/photo_screen.gd" id="script"]
+[ext_resource type="Texture2D" uid="uid://c5osgxk8d4ho" path="res://res/ui/photo/share_instagram.png" id="share_instagram"]
+[ext_resource type="Texture2D" uid="uid://v3pxfx7cte8f" path="res://res/ui/photo/share_kakaotalk.png" id="share_kakaotalk"]
+[ext_resource type="Texture2D" uid="uid://dksqt62cmfihn" path="res://res/ui/photo/share_line.png" id="share_line"]
+[ext_resource type="Texture2D" uid="uid://b13mhp0ierug3" path="res://res/ui/photo/share_tiktok.png" id="share_tiktok"]
+[ext_resource type="Texture2D" uid="uid://can5itjshbokw" path="res://res/ui/photo/share_x.png" id="share_x"]
+[ext_resource type="Theme" uid="uid://djqi100w7gfnm" path="res://resources/ui_theme.tres" id="ui_theme"]
 
-[ext_resource type="Script" path="res://scripts/photo_screen.gd" id="script"]
+[ext_resource type="Texture2D" path="res://res/ui/photo/btn_platform.png" id="platform_bg"]
 
-[ext_resource type="Script" path="res://scripts/button_press_animation.gd" id="anim"]
+[ext_resource type="Texture2D" path="res://res/ui/photo/btn_save_click.png" id="save_pressed"]
 
+[sub_resource type="AtlasTexture" id="save_pressed_fitted"]
+atlas = ExtResource("save_pressed")
+region = Rect2(50, 72, 875, 165)
 
-[ext_resource type="Texture2D" path="res://res/ui/photo/dialog_panel.png" id="dialog_panel"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/dialog_inner.png" id="dialog_inner"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/btn_save.png" id="btn_save"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/ic_save.png" id="ic_save"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/btn_cancel.png" id="btn_cancel"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/share_platforms_frame.png" id="share_platforms_frame"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/share_x.png" id="share_x"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/share_line.png" id="share_line"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/share_instagram.png" id="share_instagram"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/share_tiktok.png" id="share_tiktok"]
-
-[ext_resource type="Texture2D" path="res://res/ui/photo/share_kakaotalk.png" id="share_kakaotalk"]
-
-[ext_resource type="Shader" path="res://shaders/photo_rounded_mask.gdshader" id="rounded_mask"]
+[sub_resource type="AtlasTexture" id="save_fitted"]
+atlas = ExtResource("btn_save")
+region = Rect2(50, 72, 875, 165)
 
 [sub_resource type="ShaderMaterial" id="preview_mask"]
 resource_local_to_scene = true
 shader = ExtResource("rounded_mask")
-shader_parameter/corner_radius = 32.0
 shader_parameter/preview_size = Vector2(494, 623)
+shader_parameter/corner_radius = 32.0
 
 [sub_resource type="StyleBoxEmpty" id="empty"]
 
-[node name="Photo" type="Control"]
-layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+[node name="Photo" type="Control" unique_id=1187475694]
 visible = false
-mouse_filter = 0
-script = ExtResource("script")
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 theme = ExtResource("ui_theme")
+script = ExtResource("script")
 
-[node name="Shade" type="ColorRect" parent="."]
+[node name="Shade" type="ColorRect" parent="." unique_id=299527156]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
-color = Color(0.2,0.1,0.1,0.10)
-mouse_filter = 0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.2, 0.1, 0.1, 0.1)
 
-[node name="Card" type="Control" parent="."]
+[node name="Card" type="Control" parent="." unique_id=1868894564]
 layout_mode = 1
 anchor_left = 0.055
 anchor_top = 0.115
 anchor_right = 0.945
 anchor_bottom = 0.96
-mouse_filter = 0
 
-[node name="Background" type="NinePatchRect" parent="Card"]
+[node name="Background" type="TextureRect" parent="Card" unique_id=1384522385]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 2
-anchor_bottom = 2
+anchors_preset = -1
+anchor_right = 1.0
+anchor_bottom = 1.0
 texture = ExtResource("dialog_panel")
-patch_margin_left = 160
-patch_margin_top = 160
-patch_margin_right = 160
-patch_margin_bottom = 160
+expand_mode = 1
 mouse_filter = 2
 
-scale = Vector2(0.5, 0.5)
-
-[node name="PreviewFrame" type="NinePatchRect" parent="Card"]
+[node name="PreviewFrame" type="Control" parent="Card" unique_id=1483064026]
 layout_mode = 1
-anchor_left = 0.065
-anchor_top = 0.045
-anchor_right = 0.935
-anchor_bottom = 0.68
-texture = ExtResource("dialog_inner")
-patch_margin_left = 120
-patch_margin_top = 120
-patch_margin_right = 120
-patch_margin_bottom = 120
-mouse_filter = 2
+anchors_preset = -1
+anchor_left = 0.092
+anchor_top = 0.110
+anchor_right = 0.908
+anchor_bottom = 0.661
 
-[node name="SceneCapturePreview" type="TextureRect" parent="Card/PreviewFrame"]
+[node name="SceneCapturePreview" type="TextureRect" parent="Card/PreviewFrame" unique_id=392935699]
 material = SubResource("preview_mask")
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
-offset_left = 32.0
-offset_top = 32.0
-offset_right = -32.0
-offset_bottom = -32.0
-expand_mode = 1
-stretch_mode = 5
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 mouse_filter = 2
+expand_mode = 1
+stretch_mode = 0
 
-[node name="SaveSceneCaptureButton" type="Button" parent="Card"]
+[node name="SaveSceneCaptureButton" type="Button" parent="Card" unique_id=910681475]
 layout_mode = 1
-anchor_left = 0.07
-anchor_top = 0.7
-anchor_right = 0.3
-anchor_bottom = 0.85
+anchors_preset = -1
+anchor_left = 0.115
+anchor_top = 0.835
+anchor_right = 0.885
+anchor_bottom = 0.925
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
-theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="TextureRect" parent="Card/SaveSceneCaptureButton"]
+[node name="Background" type="TextureRect" parent="Card/SaveSceneCaptureButton" unique_id=1117031714]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
-texture = ExtResource("btn_save")
-expand_mode = 1
-stretch_mode = 5
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 mouse_filter = 2
+texture = SubResource("save_fitted")
+expand_mode = 1
+stretch_mode = 0
 
-[node name="PressAnimation" type="Node" parent="Card/SaveSceneCaptureButton"]
+[node name="PressAnimation" type="Node" parent="Card/SaveSceneCaptureButton" unique_id=1306781736]
 script = ExtResource("anim")
+pressed_texture = SubResource("save_pressed_fitted")
 
-[node name="Icon" type="TextureRect" parent="Card/SaveSceneCaptureButton"]
+[node name="Icon" type="TextureRect" parent="Card/SaveSceneCaptureButton" unique_id=83520716]
 layout_mode = 1
-anchor_left = 0.28
-anchor_top = 0.12
-anchor_right = 0.72
-anchor_bottom = 0.58
+anchors_preset = -1
+anchor_left = 0.36
+anchor_top = 0.26
+anchor_right = 0.43
+anchor_bottom = 0.74
+mouse_filter = 2
 texture = ExtResource("ic_save")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="Caption" type="Label" parent="Card/SaveSceneCaptureButton"]
+[node name="Caption" type="Label" parent="Card/SaveSceneCaptureButton" unique_id=142800912]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0.53
-anchor_right = 1
-anchor_bottom = 0.92
+anchors_preset = -1
+anchor_top = 0.0
+anchor_right = 0.65
+anchor_bottom = 1.0
 text = "保存"
 horizontal_alignment = 1
 vertical_alignment = 1
-mouse_filter = 2
+anchor_left = 0.44
+theme_override_colors/font_color = Color(1,1,1,1)
+theme_override_font_sizes/font_size = 32
 
-[node name="ShareFrame" type="NinePatchRect" parent="Card"]
+[node name="ShareFrame" type="Control" parent="Card" unique_id=1376577574]
 layout_mode = 1
-anchor_left = 0.35
-anchor_top = 0.71
-anchor_right = 0.91
-anchor_bottom = 0.85
-texture = ExtResource("share_platforms_frame")
-patch_margin_left = 60
-patch_margin_top = 60
-patch_margin_right = 60
-patch_margin_bottom = 60
-mouse_filter = 2
+anchors_preset = -1
+anchor_left = 0.33
+anchor_top = 0.685
+anchor_right = 0.95
+anchor_bottom = 0.815
 
-[node name="ShareScroll" type="ScrollContainer" parent="Card/ShareFrame"]
+[node name="ShareScroll" type="ScrollContainer" parent="Card/ShareFrame" unique_id=548998960]
 layout_mode = 1
-anchor_left = 0.04
+anchors_preset = -1
+anchor_left = 0.0
 anchor_top = 0.08
-anchor_right = 0.96
+anchor_right = 1.0
 anchor_bottom = 0.92
+mouse_filter = 0
 horizontal_scroll_mode = 3
 vertical_scroll_mode = 0
-mouse_filter = 0
 
-[node name="Platforms" type="HBoxContainer" parent="Card/ShareFrame/ShareScroll"]
+[node name="Platforms" type="HBoxContainer" parent="Card/ShareFrame/ShareScroll" unique_id=1865167150]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 16
 
-[node name="XShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms"]
+[node name="XShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=503449904]
+custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
-custom_minimum_size = Vector2(90, 90)
-mouse_filter = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 0
-anchor_bottom = 0
+size_flags_vertical = 4
+tooltip_text = "X"
 focus_mode = 0
+mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
-theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
-tooltip_text = "X"
 
-[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/XShareButton"]
+[node name="PlatformBase" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/XShareButton"]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("platform_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/XShareButton" unique_id=1354656685]
+layout_mode = 1
+anchors_preset = 15
+anchor_left = 0.20
+anchor_top = 0.20
+anchor_right = 0.80
+anchor_bottom = 0.80
+mouse_filter = 2
 texture = ExtResource("share_x")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/XShareButton"]
+[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/XShareButton" unique_id=585120239]
 script = ExtResource("anim")
 
-[node name="LINEShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms"]
+[node name="LINEShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=1731673194]
+custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
-custom_minimum_size = Vector2(90, 90)
-mouse_filter = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 0
-anchor_bottom = 0
+size_flags_vertical = 4
+tooltip_text = "LINE"
 focus_mode = 0
+mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
-theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
-tooltip_text = "LINE"
 
-[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/LINEShareButton"]
+[node name="PlatformBase" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/LINEShareButton"]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("platform_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/LINEShareButton" unique_id=1243762508]
+layout_mode = 1
+anchors_preset = 15
+anchor_left = 0.20
+anchor_top = 0.20
+anchor_right = 0.80
+anchor_bottom = 0.80
+mouse_filter = 2
 texture = ExtResource("share_line")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/LINEShareButton"]
+[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/LINEShareButton" unique_id=1344235583]
 script = ExtResource("anim")
 
-[node name="InstagramShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms"]
+[node name="InstagramShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=683469021]
+custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
-custom_minimum_size = Vector2(90, 90)
-mouse_filter = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 0
-anchor_bottom = 0
+size_flags_vertical = 4
+tooltip_text = "Instagram"
 focus_mode = 0
+mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
-theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
-tooltip_text = "Instagram"
 
-[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/InstagramShareButton"]
+[node name="PlatformBase" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/InstagramShareButton"]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("platform_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/InstagramShareButton" unique_id=1359048518]
+layout_mode = 1
+anchors_preset = 15
+anchor_left = 0.20
+anchor_top = 0.20
+anchor_right = 0.80
+anchor_bottom = 0.80
+mouse_filter = 2
 texture = ExtResource("share_instagram")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/InstagramShareButton"]
+[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/InstagramShareButton" unique_id=491366355]
 script = ExtResource("anim")
 
-[node name="TikTokShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms"]
+[node name="TikTokShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=1103016903]
+custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
-custom_minimum_size = Vector2(90, 90)
-mouse_filter = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 0
-anchor_bottom = 0
+size_flags_vertical = 4
+tooltip_text = "TikTok"
 focus_mode = 0
+mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
-theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
-tooltip_text = "TikTok"
 
-[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/TikTokShareButton"]
+[node name="PlatformBase" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/TikTokShareButton"]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("platform_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/TikTokShareButton" unique_id=1246404253]
+layout_mode = 1
+anchors_preset = 15
+anchor_left = 0.20
+anchor_top = 0.20
+anchor_right = 0.80
+anchor_bottom = 0.80
+mouse_filter = 2
 texture = ExtResource("share_tiktok")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/TikTokShareButton"]
+[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/TikTokShareButton" unique_id=915912661]
 script = ExtResource("anim")
 
-[node name="KakaoShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms"]
+[node name="KakaoShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=170805328]
+custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
-custom_minimum_size = Vector2(90, 90)
-mouse_filter = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 0
-anchor_bottom = 0
+size_flags_vertical = 4
+tooltip_text = "Kakao"
 focus_mode = 0
+mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
-theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
-tooltip_text = "Kakao"
 
-[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/KakaoShareButton"]
+[node name="PlatformBase" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/KakaoShareButton"]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("platform_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/KakaoShareButton" unique_id=347216214]
+layout_mode = 1
+anchors_preset = 15
+anchor_left = 0.20
+anchor_top = 0.20
+anchor_right = 0.80
+anchor_bottom = 0.80
+mouse_filter = 2
 texture = ExtResource("share_kakaotalk")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/KakaoShareButton"]
+[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/KakaoShareButton" unique_id=1214335966]
 script = ExtResource("anim")
 
-[node name="CloseSceneCaptureButton" type="Button" parent="Card"]
+[node name="CloseSceneCaptureButton" type="Button" parent="Card" unique_id=985521541]
 layout_mode = 1
-anchor_left = 0.12
-anchor_top = 0.885
-anchor_right = 0.9
-anchor_bottom = 0.97
+anchors_preset = -1
+anchor_left = 0.07
+anchor_top = 0.685
+anchor_right = 0.28
+anchor_bottom = 0.815
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
-theme_override_styles/hover = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
 theme_override_styles/disabled = SubResource("empty")
 theme_override_styles/focus = SubResource("empty")
 
-[node name="Background" type="TextureRect" parent="Card/CloseSceneCaptureButton"]
+[node name="Background" type="TextureRect" parent="Card/CloseSceneCaptureButton" unique_id=1588718262]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
 texture = ExtResource("btn_cancel")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="Caption" type="Label" parent="Card/CloseSceneCaptureButton"]
+[node name="Caption" type="Label" parent="Card/CloseSceneCaptureButton" unique_id=2029042469]
 layout_mode = 1
-anchor_left = 0
-anchor_top = 0
-anchor_right = 1
-anchor_bottom = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_right = -12.0
+autowrap_mode = 3
+mouse_filter = 2
 text = "取消"
 horizontal_alignment = 1
 vertical_alignment = 1
-mouse_filter = 2
+theme_override_colors/font_color = Color(0.76,0.49,0.55,1)
+theme_override_font_sizes/font_size = 28
 
-[node name="PressAnimation" type="Node" parent="Card/CloseSceneCaptureButton"]
+[node name="PressAnimation" type="Node" parent="Card/CloseSceneCaptureButton" unique_id=2066845151]
 script = ExtResource("anim")
 
-[node name="Status" type="Label" parent="Card"]
+[node name="Status" type="Label" parent="Card" unique_id=1392227849]
 layout_mode = 1
+anchors_preset = -1
 anchor_left = 0.07
-anchor_top = 0.855
+anchor_top = 0.805
 anchor_right = 0.93
-anchor_bottom = 0.885
-text = ""
-autowrap_mode = 3
+anchor_bottom = 0.835
+theme_override_colors/font_color = Color(0.6, 0.34, 0.35, 1)
+theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 vertical_alignment = 1
-theme_override_font_sizes/font_size = 16
-theme_override_colors/font_color = Color(0.60,0.34,0.35,1)
-mouse_filter = 2
+autowrap_mode = 3
