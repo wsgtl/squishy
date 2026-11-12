@@ -9,7 +9,7 @@ const TYPES := [
 ]
 
 # One product per feel; update these paths when new product assets arrive.
-const MODELS := ["res://glb/fy.glb", "res://glb/sfl.glb", "res://glb/df.glb"]
+const MODELS := ["res://glb/fy.glb", "res://glb/sfl.glb", "res://glb/banana.glb"]
 
 static func model_path(index: int) -> String:
  return MODELS[clampi(index, 0, MODELS.size() - 1)]

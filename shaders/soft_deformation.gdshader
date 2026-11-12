@@ -14,6 +14,7 @@ uniform bool diagnostic_normal_color = false;
 uniform bool diagnostic_triangle_normal = false;
 varying highp vec3 diagnostic_view_position;
 uniform float material_roughness = 0.6;
+uniform float albedo_brightness : hint_range(0.0, 1.0) = 1.0;
 uniform float material_metallic = 0.0;
 uniform float material_specular : hint_range(0.0, 1.0) = 0.5;
 uniform float dent_shadow_strength : hint_range(0.0, 0.8) = 0.225;
@@ -36,6 +37,8 @@ uniform vec3 twist_axis = vec3(0.0, 0.0, -1.0);
 uniform float twist_extent = 1.0;
 uniform float twist_direction = 1.0;
 uniform float twist_deformation_scale = 1.0;
+uniform float twist_angle_scale = 1.0;
+uniform float twist_wrinkle_scale = 1.0;
 uniform float grip_amount = 0.0;
 uniform vec4 grip_pose = vec4(0.0);
 uniform float grip_stage = 0.0;
@@ -124,7 +127,7 @@ vec3 twist_offset(vec3 p) {
 	float t = clamp(axial / twist_extent, -1.0, 1.0);
 	vec3 radial = c - twist_axis * axial;
 	float waist = 1.0 - t * t;
-	float angle = twist_direction * 1.8325957146 * sin(t * 3.14159265359 * 0.5) * amount;
+	float angle = twist_direction * twist_angle_scale * 1.8325957146 * sin(t * 3.14159265359 * 0.5) * amount;
 	float ends = smoothstep(0.25, 0.90, abs(t));
 	vec3 side = normalize(cross(twist_axis, vec3(0.0, 1.0, 0.0)));
 	float side_extent = max(abs(side.x) * model_size.x * 0.5 + abs(side.z) * model_size.z * 0.5, 0.000001);
@@ -142,7 +145,7 @@ vec3 twist_offset(vec3 p) {
 	float depth = 0.76 + 0.24 * sin(theta - 4.1 * t);
 	float local_fold = 0.5 + 0.5 * sin(2.0 * theta + 5.7 * t + 0.8);
 	float wave = (0.065 + 0.045 * ends) * sin(phase) * depth + 0.045 * waist * sin(secondary) * local_fold + 0.022 * waist * waist * sin(fine);
-	float wrinkle = wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, abs(t))) * pow(max(amount, 0.0), 1.5);
+	float wrinkle = twist_wrinkle_scale * wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, abs(t))) * pow(max(amount, 0.0), 1.5);
 	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * amount + wrinkle;
 	vec3 rotated = radial * cos(angle) + cross(twist_axis, radial) * sin(angle);
 	vec3 result = rotated + twist_axis * axial * (1.0 + 0.06 * amount) - c;
@@ -402,6 +405,7 @@ void fragment() {
 	if (has_albedo_texture) {
 		color *= texture(albedo_texture, UV);
 	}
+	color.rgb *= albedo_brightness;
 	if (has_doodle_texture) {
 		vec4 ink = texture(doodle_texture, UV);
 		color.rgb = mix(color.rgb, ink.rgb, ink.a);

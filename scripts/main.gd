@@ -9,9 +9,9 @@ const SceneCapture = preload("res://scripts/scene_capture.gd")
 var _scene_capture: CanvasLayer
 const FeelPresets = preload("res://scripts/feel_presets.gd")
 const HomeScreen = preload("res://scenes/home.tscn")
-var _active_model_path: String = FeelPresets.model_path(0)
+var _active_model_path: String = FeelPresets.model_path(1)
 var _home_active := true
-var _selected_feel := 0
+var _selected_feel := 1
 var _hud_root: Control
 var _home: Control
 var _feel_sliders: Dictionary = {}
@@ -75,6 +75,7 @@ var _pointer_position := Vector2.ZERO
 var _active_touch_id := -1
 var _touches: Dictionary = {}
 var _pinch_start_distance := 0.0
+var _press_contact: Dictionary = {}
 var _press_pointer_dirty := false
 var _drag_plane := Plane()
 var _drag_camera_transform := Transform3D.IDENTITY
@@ -140,6 +141,22 @@ func _game_back() -> void:
 		_return_home()
 
 func _ready() -> void:
+	get_window().title = "描いて！握って！ぷにっこスクイーズ"
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("""
+(() => {
+ document.title='描いて！握って！ぷにっこスクイーズ';
+ const canvas=document.getElementById('canvas');
+ if(!canvas || canvas.dataset.punikkoTouchGuard) return;
+ canvas.dataset.punikkoTouchGuard='1';
+ canvas.style.touchAction='none';
+ canvas.style.webkitUserSelect='none';
+ const prevent=e=>{if(e.cancelable)e.preventDefault();};
+ // Cancel Safari zoom without stopping propagation to Godot's touch handlers.
+ for(const name of ['touchstart','touchmove','gesturestart','gesturechange','gestureend'])
+  canvas.addEventListener(name,prevent,{passive:false});
+})();
+""", true)
 	_action_audio = preload("res://scripts/action_audio.gd").new()
 	add_child(_action_audio)
 	_load_font()
@@ -170,7 +187,7 @@ func _refresh_language() -> void:
 	_scene_capture.dialog.filters = PackedStringArray([tr("*.jpg, *.jpeg ; JPEG 图片")])
 	for platform in ["X", "LINE"]:
 		var share := _scene_capture.find_child(platform + "ShareButton", true, false) as Button
-		share.tooltip_text = tr("在 %s 分享文字和游戏链接") % platform
+		share.tooltip_text = ""
 
 func _apply_feel(index: int) -> void:
 	_selected_feel = clampi(index, 0, FeelPresets.TYPES.size() - 1)
@@ -178,7 +195,8 @@ func _apply_feel(index: int) -> void:
 	_blob.cancel_grip()
 	_blob.reset_deformation()
 	var next_model := FeelPresets.model_path(_selected_feel)
-	if next_model != _active_model_path:
+	var model_changed := next_model != _active_model_path
+	if model_changed:
 		_switch_model(next_model)
 	var parameters := FeelPresets.parameters(_selected_feel)
 	for key in parameters:
@@ -186,6 +204,8 @@ func _apply_feel(index: int) -> void:
 		if _feel_sliders.has(key):
 			(_feel_sliders[key] as Range).set_value_no_signal(parameters[key])
 	_blob._sync_gpu()
+	if model_changed and _home_active:
+		_blob.play_model_arrival()
 
 func _return_home() -> void:
 	if _wax_mode != null:
@@ -295,6 +315,10 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.keycode == KEY_SHIFT and _active_touch_id < 0 and _dragging:
 		_switch_mouse_mode(event.pressed)
 	elif event is InputEventScreenTouch and _touches.has(event.index):
+		if event.canceled:
+			_finish_gesture()
+			get_viewport().set_input_as_handled()
+			return
 		if not event.pressed:
 			_touches.erase(event.index)
 			if _touches.is_empty():
@@ -338,12 +362,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# A second finger must start on the model and outside GUI controls.
 	if event is InputEventScreenTouch and event.pressed and _touches.size() == 1 and _dragging:
 		var second_hit := _raycast_blob(event.position, true)
-		var first_hit := _raycast_blob(_touches[_active_touch_id], true)
+		var first_hit := _press_contact
 		if not second_hit.is_empty() and not first_hit.is_empty():
 			_touches[event.index] = event.position
-			_begin_pointer(_touches[_active_touch_id], true, MOUSE_BUTTON_LEFT)
+			_begin_pointer(_touches[_active_touch_id], true, MOUSE_BUTTON_LEFT, first_hit)
+			_drag_plane = Plane(_drag_camera_transform.basis.z.normalized(), first_hit.position)
 			_blob.set_stretch_contacts(first_hit.rest_point, first_hit.local_normal, second_hit.rest_point, second_hit.local_normal)
 			_pinch_start_distance = _touch_separation().length()
+			get_viewport().set_input_as_handled()
 		return
 	if _dragging or _is_rotating or _active_touch_id >= 0:
 		return
@@ -429,6 +455,7 @@ func _physics_process(delta: float) -> void:
 			# pointer events into at most one native query per physics frame.
 			var hit := _raycast_blob(_pointer_position, true)
 			if not hit.is_empty():
+				_press_contact = hit.duplicate()
 				_blob.update_press(hit.rest_point, hit.local_normal)
 		return
 	# Frozen projection prevents camera retreat from changing gesture distance.
@@ -497,12 +524,13 @@ func _rotate_model(delta: Vector2) -> void:
 		return
 	_model_root.rotate_y(delta.x * 0.008)
 
-func _begin_pointer(screen_position: Vector2, stretch: bool, button: int) -> void:
+func _begin_pointer(screen_position: Vector2, stretch: bool, button: int, contact: Dictionary = {}) -> void:
 	if _doodle_enabled or _blob.is_grip_held():
 		return
-	var hit := _raycast_blob(screen_position)
+	var hit := contact if not contact.is_empty() else _raycast_blob(screen_position)
 	if hit.is_empty():
 		return
+	_press_contact = hit.duplicate()
 	_dragging = true
 	_stretching = stretch
 	_active_button = button

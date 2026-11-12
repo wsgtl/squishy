@@ -2,6 +2,7 @@ extends CanvasLayer
 
 # A one-shot 3D viewport shares the world, never the UI canvas.
 const MAX_EDGE := 4096
+const WEB_MAX_EDGE := 1280
 var host: Node3D
 var overlay: Control
 var preview: TextureRect
@@ -12,6 +13,7 @@ var captured: Image
 var jpeg := PackedByteArray()
 var filename := ""
 var busy := false
+var _close_requested := false
 var dialog: FileDialog
 var _web_status_elapsed := 0.0
 var _render_diagnostic_elapsed := 0.0
@@ -20,6 +22,8 @@ var _render_diagnostic_blob_id := 0
 var _last_target_diagnostics := ""
 var _capture_viewport: SubViewport
 var _capture_camera: Camera3D
+var _shutter_flash: ColorRect
+var _foreground_max_fps := -1
 const GAME_URL := "https://game.punikko.fun/games/squishy/"
 
 func setup(scene: Node3D, hud: Control, font: Font) -> void:
@@ -31,16 +35,17 @@ func setup(scene: Node3D, hud: Control, font: Font) -> void:
 	trigger.pressed.connect(capture_scene)
 	overlay = preload("res://scenes/photo.tscn").instantiate()
 	add_child(overlay)
+	overlay.close_requested.connect(close)
 	preview = overlay.get_node("Card/PreviewFrame/SceneCapturePreview")
 	status = overlay.get_node("Card/Status")
 	save_button = overlay.get_node("Card/SaveSceneCaptureButton")
 	save_button.get_node("Caption").text = tr("保存")
 	save_button.pressed.connect(save_image)
 	actions.append(save_button)
-	for platform in ["X", "LINE", "Instagram", "TikTok", "Kakao"]:
+	for platform in ["X", "LINE", "More"]:
 		var button: Button = overlay.get_node("Card/ShareFrame/ShareScroll/Platforms/" + platform + "ShareButton")
 		button.pressed.connect(func(): share_image(platform))
-		button.tooltip_text = tr("在 %s 分享文字和游戏链接") % platform if platform in ["X", "LINE"] else tr("通过系统分享选择 %s；若未显示，请保存图片后上传。") % platform
+		button.tooltip_text = ""
 		actions.append(button)
 	var cancel: Button = overlay.get_node("Card/CloseSceneCaptureButton")
 	cancel.get_node("Caption").text = tr("取消")
@@ -54,6 +59,28 @@ func setup(scene: Node3D, hud: Control, font: Font) -> void:
 	dialog.filters = PackedStringArray([tr("*.jpg, *.jpeg ; JPEG 图片")])
 	dialog.file_selected.connect(_save_to_path)
 	add_child(dialog)
+	_shutter_flash = ColorRect.new()
+	_shutter_flash.name = "ShutterFlash"
+	_shutter_flash.color = Color.WHITE
+	_shutter_flash.mouse_filter = Control.MOUSE_FILTER_STOP
+	_shutter_flash.hide()
+	add_child(_shutter_flash)
+	_shutter_flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+func _notification(what: int) -> void:
+	if not OS.has_feature("web"):
+		return
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		if _foreground_max_fps < 0:
+			_foreground_max_fps = Engine.max_fps
+		Engine.max_fps = 10
+		RenderingServer.render_loop_enabled = false
+		_capture_log("render.background", {"video_memory": Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)})
+	elif what == NOTIFICATION_APPLICATION_FOCUS_IN and _foreground_max_fps >= 0:
+		RenderingServer.render_loop_enabled = true
+		Engine.max_fps = _foreground_max_fps
+		_foreground_max_fps = -1
+		_capture_log("render.foreground")
 
 func is_open() -> bool:
 	return overlay != null and overlay.visible
@@ -82,17 +109,30 @@ func _physical_size() -> Vector2i:
 		var dimensions = JavaScriptBridge.eval("JSON.stringify([Math.round(innerWidth*devicePixelRatio),Math.round(innerHeight*devicePixelRatio)])")
 		var parsed = JSON.parse_string(str(dimensions))
 		if parsed is Array and parsed.size() == 2:
-			return capture_size(Vector2i(int(parsed[0]), int(parsed[1])))
+			var physical := Vector2(float(parsed[0]), float(parsed[1]))
+			physical *= minf(1.0, float(WEB_MAX_EDGE) / maxf(physical.x, physical.y))
+			return capture_size(Vector2i(physical))
 	return capture_size(DisplayServer.window_get_size())
 
 func capture_scene() -> void:
 	if busy or is_open():
 		return
 	busy = true
-	get_node("/root/UiAudio").play_shutter()
+	_close_requested = false
+	var capture_started := Time.get_ticks_msec()
 	host._finish_gesture()
 	host._refresh_sticker_preview()
 	host._doodle.flush()
+	# This UI-only flash is never rendered into the scene-only capture viewport.
+	_shutter_flash.modulate.a = 0.9
+	_shutter_flash.show()
+	get_node("/root/UiAudio").play_shutter()
+	var flash_tween := create_tween()
+	flash_tween.tween_interval(0.04)
+	flash_tween.tween_property(_shutter_flash, "modulate:a", 0.0, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await flash_tween.finished
+	_shutter_flash.hide()
+	overlay.get_node("Card").scale = Vector2.ZERO
 	overlay.show()
 	preview.texture = null
 	captured = null
@@ -100,7 +140,7 @@ func capture_scene() -> void:
 	status.text = tr("正在生成场景照片…")
 	for button in actions:
 		button.disabled = true
-	# Reuse the offscreen render target; recreate neither GPU buffers nor camera on reopen.
+	# Allocate a capture-only target; release it before enabling external sharing.
 	if not is_instance_valid(_capture_viewport):
 		_capture_viewport = SubViewport.new()
 		_capture_viewport.name = "SceneOnlyCaptureViewport"
@@ -114,11 +154,19 @@ func capture_scene() -> void:
 	_capture_camera.global_transform = host._camera.global_transform
 	for property in ["projection", "fov", "size", "near", "far", "keep_aspect", "h_offset", "v_offset", "frustum_offset", "cull_mask", "environment", "attributes"]:
 		_capture_camera.set(property, host._camera.get(property))
+	# Gameplay framing leaves room for controls; photos center the product instead.
+	var model_bounds: AABB = host._get_model_aabb(host._model_root)
+	var model_center: Vector3 = model_bounds.get_center()
+	var camera_local_center: Vector3 = _capture_camera.global_transform.affine_inverse() * model_center
+	_capture_camera.h_offset = 0.0
+	_capture_camera.v_offset = 0.0
+	_capture_camera.global_position += _capture_camera.global_basis.x * camera_local_center.x + _capture_camera.global_basis.y * camera_local_center.y
 	_capture_camera.make_current()
-	_capture_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_capture_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_capture_log("capture.begin", {"size": str(_capture_viewport.size)})
 	# A post-draw signal alone may belong to the frame before this target was ready.
 	for attempt in range(3):
+		_capture_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		captured = _capture_viewport.get_texture().get_image()
@@ -126,22 +174,41 @@ func capture_scene() -> void:
 		if captured != null and not captured.is_empty():
 			break
 	_capture_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	# The Image owns the readback. Drop the viewport and camera, including world
+	# render resources, rather than keeping a tiny but live secondary viewport.
+	_capture_viewport.world_3d = null
+	_capture_viewport.queue_free()
+	_capture_viewport = null
+	_capture_camera = null
+	_capture_log("capture.target_released")
 	if captured != null and not captured.is_empty():
 		captured.convert(Image.FORMAT_RGB8)
-		jpeg = _encode_capture_jpeg(captured)
-		_capture_log("capture.encoded", {"size": str(captured.get_size()), "jpeg_bytes": jpeg.size(), "preview_size": str(preview.size)})
 		filename = "punikko-" + Time.get_datetime_string_from_system().replace(":", "-") + ".jpg"
 		var thumbnail := captured.duplicate() as Image
 		var scale := minf(1.0, 960.0 / maxf(thumbnail.get_width(), thumbnail.get_height()))
 		thumbnail.resize(maxi(1, roundi(thumbnail.get_width() * scale)), maxi(1, roundi(thumbnail.get_height() * scale)), Image.INTERPOLATE_LANCZOS)
 		preview.texture = ImageTexture.create_from_image(thumbnail)
+		_capture_log("capture.preview_ready", {"elapsed_ms": Time.get_ticks_msec() - capture_started, "size": str(captured.get_size())})
+		await overlay.animate_open()
+		# Present the engine image before potentially expensive JPEG work.
+		await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var encode_started := Time.get_ticks_msec()
+		jpeg = _encode_capture_jpeg(captured)
+		_capture_log("capture.encoded", {"encode_ms": Time.get_ticks_msec() - encode_started, "elapsed_ms": Time.get_ticks_msec() - capture_started, "jpeg_bytes": jpeg.size()})
 		status.text = ""
 	else:
 		status.text = tr("图片生成失败，请关闭后重试。")
 	if jpeg.is_empty():
 		status.text = tr("图片生成失败，请关闭后重试。")
 		_capture_log("capture.failed")
+	captured = null
 	busy = false
+	if _close_requested:
+		close()
+		return
+	if preview.texture == null:
+		overlay.animate_open()
 	for button in actions:
 		button.disabled = jpeg.is_empty() and button.name != "CloseSceneCaptureButton"
 	if OS.has_feature("web") and not jpeg.is_empty():
@@ -151,10 +218,16 @@ func capture_scene() -> void:
 		_sync_web_share_targets.call_deferred()
 
 func _encode_capture_jpeg(source: Image) -> PackedByteArray:
+	var native_started := Time.get_ticks_msec()
+	var native_jpeg := source.save_jpg_to_buffer(0.93)
+	var valid := native_jpeg.size() > 4 and native_jpeg[0] == 0xff and native_jpeg[1] == 0xd8 and native_jpeg[native_jpeg.size() - 2] == 0xff and native_jpeg[native_jpeg.size() - 1] == 0xd9
+	_capture_log("capture.engine_encoded", {"elapsed_ms": Time.get_ticks_msec() - native_started, "bytes": native_jpeg.size(), "valid": valid})
+	if valid:
+		return native_jpeg
 	if not OS.has_feature("web"):
-		return source.save_jpg_to_buffer(0.93)
-	# WebKit can return an empty buffer from the engine JPEG encoder on repeat captures.
-	# Use browser-native encoding from raw pixels, without changing color space or cropping.
+		return PackedByteArray()
+	# Keep the browser fallback for WebKit repeat-capture encoding failures.
+	_capture_log("capture.browser_fallback")
 	var rgba := source.duplicate() as Image
 	rgba.convert(Image.FORMAT_RGBA8)
 	var encoded = JavaScriptBridge.eval(WEB_ENCODE_JPEG % [JSON.stringify(Marshalls.raw_to_base64(rgba.get_data())), rgba.get_width(), rgba.get_height()], true)
@@ -168,6 +241,8 @@ func _capture_log(event: String, data: Dictionary = {}) -> void:
 
 func close() -> void:
 	if busy:
+		_close_requested = true
+		overlay.hide()
 		return
 	dialog.hide()
 	overlay.hide()
@@ -285,7 +360,7 @@ const WEB_BRIDGE := """
  if(window.punikkoPhoto) window.punikkoPhoto.dispose();
  const session=Date.now();
  const log=(event,data={})=>{if(window.punikkoShareLog) window.punikkoShareLog(event,Object.assign({session},data));};
- log('photo.create',{build:'share-debug-4',secure:window.isSecureContext,agent:navigator.userAgent});
+ log('photo.create',{build:'share-lifecycle-3',secure:window.isSecureContext,agent:navigator.userAgent});
  const bytes=Uint8Array.from(atob(%s),c=>c.charCodeAt(0));
  const name=%s, blob=new Blob([bytes],{type:'image/jpeg'});
  const labels=%s;
@@ -297,7 +372,7 @@ const WEB_BRIDGE := """
  const canFileShare=()=>{try{return !!(window.isSecureContext&&navigator.share&&navigator.canShare&&navigator.canShare({files:[file]}));}catch(e){return false;}};
  const download=()=>{const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();};
  const share=async(platform)=>{
-  log('share.request',{platform,disposed,sharing,active:navigator.userActivation ? navigator.userActivation.isActive : null,visibility:document.visibilityState,bytes:blob.size});
+  log('share.request',{platform,disposed,sharing,active:navigator.userActivation ? navigator.userActivation.isActive : null,visibility:document.visibilityState,bytes:blob.size,heap:performance.memory?{used:performance.memory.usedJSHeapSize,total:performance.memory.totalJSHeapSize,limit:performance.memory.jsHeapSizeLimit}:null,canvas:canvas?{width:canvas.width,height:canvas.height}:null});
   if(disposed){log('share.skipped',{reason:'disposed'});return;}
   if(platform==='X'){
    log('share.web_intent',{platform});
@@ -339,7 +414,7 @@ const WEB_BRIDGE := """
  };
  const cancel=e=>{log('lifecycle.cancel',{event:e ? e.type : 'hidden'});touch=null;};
  const resume=e=>{log('lifecycle.resume',{event:e ? e.type : 'visible',sharing});++shareVersion; touch=null; sharing=false; lastNativeAt=-Infinity;};
- const visibility=()=>{if(document.visibilityState==='visible') resume(); else cancel();};
+ const visibility=()=>{log('share.visibility',{state:document.visibilityState});if(document.visibilityState==='visible') resume(); else cancel();};
  const end=e=>{
   log('touch.end',{tracked:!!touch,trusted:e.isTrusted});
   if(!touch) return;
@@ -386,6 +461,21 @@ const WEB_DIAGNOSTICS := """
  if(existing){existing.hidden=false;return;}
  const boot=document.getElementById('punikko-debug-boot');if(boot)boot.remove();
  const rows=window.punikkoDiagnosticRows||(window.punikkoDiagnosticRows=[]);
+ try{
+  const previous=JSON.parse(localStorage.getItem('punikko.contextLoss')||'null');
+  if(previous) rows.push({time:new Date().toISOString(),event:'render.previous_context_loss',data:previous});
+ }catch(e){}
+ const lifecycle={hiddenAt:null,focused:document.hasFocus(),resizes:[]};
+ document.addEventListener('visibilitychange',()=>{
+  lifecycle.hiddenAt=document.hidden?Date.now():lifecycle.hiddenAt;
+  window.punikkoShareLog('render.visibility',{hidden:document.hidden,focused:document.hasFocus()});
+ });
+ window.addEventListener('resize',()=>{
+  const c=document.getElementById('canvas');
+  const sample={time:Date.now(),width:innerWidth,height:innerHeight,dpr:devicePixelRatio,canvasWidth:c?.width,canvasHeight:c?.height};
+  lifecycle.resizes.push(sample);if(lifecycle.resizes.length>8)lifecycle.resizes.shift();
+  window.punikkoShareLog('render.resize',sample);
+ });
  window.punikkoShareLog=(event,data={})=>{
   const row={time:new Date().toISOString(),event,...data};
   rows.push(row); if(rows.length>400) rows.shift();
@@ -416,7 +506,7 @@ const WEB_DIAGNOSTICS := """
  };panel.appendChild(download);
 
  const update=document.createElement('button');update.textContent='刷新 / Refresh';update.onclick=refresh;panel.append(update);
- panel.hidden=false;
+ panel.hidden=true;//隐藏手机诊断按钮
  document.body.append(panel);
 
  // Keep diagnostics inside both the portrait game area and the visible viewport.
@@ -462,7 +552,45 @@ const WEB_DIAGNOSTICS := """
  // consume GL errors, compile shaders or change render state.
  const canvas=document.getElementById('canvas');
  if(canvas){
-  canvas.addEventListener('webglcontextlost',()=>window.punikkoShareLog('render.context_lost'));
+  canvas.addEventListener('webglcontextlost',(event)=>{
+   // Handle recovery before the engine's blocking reload alert.
+   event.preventDefault();
+   event.stopImmediatePropagation();
+   const loss={build:'share-lifecycle-3',visibility:document.visibilityState,statusMessage:event.statusMessage||'',focused:document.hasFocus(),hiddenAt:lifecycle.hiddenAt,resizes:lifecycle.resizes,canvas:{width:canvas.width,height:canvas.height},recent:rows.slice(-60)};
+   try{localStorage.setItem('punikko.contextLoss',JSON.stringify(loss));}catch(e){}
+   window.punikkoShareLog('render.context_lost',{...loss,recent:undefined});
+   if(document.getElementById('punikko-context-recovery')) return;
+   const panel=document.createElement('div');
+   panel.id='punikko-context-recovery';
+   panel.style.cssText='position:fixed;inset:0;z-index:2147483647;background:#e9dfff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:28px;text-align:center;color:#655778;font:18px sans-serif';
+   const zh=(navigator.language||'').toLowerCase().startsWith('zh');
+   const message=document.createElement('p');
+   message.textContent=zh?'浏览器中断了游戏画面，请重新加载。未保存的编辑将会丢失。':'ブラウザがゲーム画面を中断しました。再読み込みしてください。未保存の編集は失われます。';
+   const retry=document.createElement('button');
+   retry.textContent=zh?'重新加载游戏':'ゲームを再読み込み';
+   retry.style.cssText='padding:14px 24px;border:0;border-radius:24px;background:#cf7fa5;color:white;font:inherit';
+   retry.onclick=()=>location.reload();
+   panel.append(message,retry);document.body.append(panel);
+   let scheduled=false;
+   const recover=()=>{
+    if(document.hidden || scheduled) return;
+    scheduled=true;
+    let allowed=false;
+    try{
+     const last=Number(sessionStorage.getItem('punikko.contextReloadAt')||0);
+     allowed=Date.now()-last>60000;
+     if(allowed) sessionStorage.setItem('punikko.contextReloadAt',String(Date.now()));
+    }catch(e){/* Keep manual recovery if loop protection cannot be persisted. */}
+    if(!allowed) return;
+    message.textContent=zh?'画面中断，正在重新加载游戏…':'画面が中断されました。ゲームを再読み込みしています…';
+    retry.hidden=true;
+    window.punikkoShareLog('render.auto_reload');
+    setTimeout(()=>location.reload(),250);
+   };
+   document.addEventListener('visibilitychange',recover);
+   window.addEventListener('pageshow',recover);
+   recover();
+  },true);
   canvas.addEventListener('webglcontextrestored',()=>window.punikkoShareLog('render.context_restored'));
   try{
    const gl=canvas.getContext('webgl2');

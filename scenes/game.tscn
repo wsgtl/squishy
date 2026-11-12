@@ -18,7 +18,7 @@
 [ext_resource type="Texture2D" uid="uid://btst2n53tsdst" path="res://res/ui/game/btn_press_click.png" id="press_pressed"]
 [ext_resource type="Texture2D" uid="uid://bs4yu5phhjicl" path="res://res/ui/game/switch_squish_1.png" id="s1"]
 [ext_resource type="Script" uid="uid://cff4wlq82jxkj" path="res://scripts/game_screen.gd" id="script"]
-[ext_resource type="Texture2D" uid="uid://b72bbad6fwyb2" path="res://res/ui/home/volume_on.png" id="sound"]
+[ext_resource type="Texture2D" path="res://res/ui/home/sound_on_icon.png" id="sound"]
 [ext_resource type="Texture2D" uid="uid://cnkyd2qe61w0e" path="res://res/ui/game/switch_bg.png" id="switch"]
 [ext_resource type="Texture2D" uid="uid://c2f5btu81do1u" path="res://res/ui/game/switch_left.png" id="switch_left"]
 [ext_resource type="Texture2D" uid="uid://l1in063h0uat" path="res://res/ui/game/switch_right.png" id="switch_right"]
@@ -204,10 +204,10 @@ stretch_mode = 5
 
 [node name="GripButton" type="Button" parent="." unique_id=1221529148]
 layout_mode = 0
-anchor_left = 0.28
-anchor_top = 0.765
-anchor_right = 0.72
-anchor_bottom = 0.895
+anchor_left = 0.67
+anchor_top = 0.785
+anchor_right = 0.96
+anchor_bottom = 0.875
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
@@ -256,10 +256,10 @@ stretch_mode = 5
 
 [node name="TwistButton" type="Button" parent="." unique_id=532527323]
 layout_mode = 0
-anchor_left = 0.52
-anchor_top = 0.615
-anchor_right = 0.96
-anchor_bottom = 0.745
+anchor_left = 0.355
+anchor_top = 0.785
+anchor_right = 0.645
+anchor_bottom = 0.875
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
@@ -309,9 +309,9 @@ stretch_mode = 5
 [node name="FlattenButton" type="Button" parent="." unique_id=318734355]
 layout_mode = 0
 anchor_left = 0.04
-anchor_top = 0.615
-anchor_right = 0.48
-anchor_bottom = 0.745
+anchor_top = 0.785
+anchor_right = 0.33
+anchor_bottom = 0.875
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
 theme_override_styles/pressed = SubResource("empty")
@@ -358,6 +358,20 @@ texture = ExtResource("icon_press")
 expand_mode = 1
 stretch_mode = 5
 
+[node name="OperationHint" type="Label" parent="."]
+layout_mode = 0
+anchor_left = 0.03
+anchor_right = 0.97
+anchor_top = 0.877
+anchor_bottom = 0.913
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.50, 0.43, 0.61, 1)
+theme_override_font_sizes/font_size = 20
+text = "左键按住拖动：按压 · Shift＋拖动：拉伸"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
 [node name="ModeBackground" type="TextureRect" parent="." unique_id=1211722179]
 layout_mode = 0
 anchor_top = 0.915
@@ -389,27 +403,34 @@ mouse_filter = 2
 texture = SubResource("switch_left_fitted")
 expand_mode = 1
 
-[node name="Icon" type="TextureRect" parent="SquishModeButton" unique_id=1840016080]
-layout_mode = 0
-anchor_left = 0.16
-anchor_top = 0.2
-anchor_right = 0.34
-anchor_bottom = 0.8
+[node name="Content" type="CenterContainer" parent="SquishModeButton"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="SquishModeButton/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Icon" type="TextureRect" parent="SquishModeButton/Content/Row" unique_id=1840016080]
+layout_mode = 2
+custom_minimum_size = Vector2(64, 64)
+size_flags_vertical = 4
 mouse_filter = 2
 texture = ExtResource("s1")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Caption" type="Label" parent="SquishModeButton" unique_id=1147316496]
-layout_mode = 0
-anchor_left = 0.36
-anchor_right = 0.88
-anchor_bottom = 1.0
+[node name="Caption" type="Label" parent="SquishModeButton/Content/Row" unique_id=1147316496]
+layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 32
 text = "捏捏"
 horizontal_alignment = 1
 vertical_alignment = 1
+mouse_filter = 2
 
 [node name="DoodleButton" type="Button" parent="." unique_id=2048543550]
 layout_mode = 0
@@ -435,27 +456,34 @@ mouse_filter = 2
 texture = SubResource("switch_right_fitted")
 expand_mode = 1
 
-[node name="Icon" type="TextureRect" parent="DoodleButton" unique_id=410776340]
-layout_mode = 0
-anchor_left = 0.16
-anchor_top = 0.2
-anchor_right = 0.34
-anchor_bottom = 0.8
+[node name="Content" type="CenterContainer" parent="DoodleButton"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="DoodleButton/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Icon" type="TextureRect" parent="DoodleButton/Content/Row" unique_id=410776340]
+layout_mode = 2
+custom_minimum_size = Vector2(64, 64)
+size_flags_vertical = 4
 mouse_filter = 2
 texture = ExtResource("d0")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Caption" type="Label" parent="DoodleButton" unique_id=426531917]
-layout_mode = 0
-anchor_left = 0.36
-anchor_right = 0.88
-anchor_bottom = 1.0
-theme_override_colors/font_color = Color(0.67451, 0.54902, 0.509804, 1)
-theme_override_font_sizes/font_size = 28
+[node name="Caption" type="Label" parent="DoodleButton/Content/Row" unique_id=426531917]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6509804, 0.5960784, 0.7529412, 1)
+theme_override_font_sizes/font_size = 32
 text = "涂鸦"
 horizontal_alignment = 1
 vertical_alignment = 1
+mouse_filter = 2
 
 [node name="Edit" parent="." unique_id=2102854467 instance=ExtResource("edit")]
 visible = false

@@ -1,5 +1,8 @@
 extends Control
 
+signal close_requested
+var _open_tween: Tween
+
 var _scroll_pointer := -2 # -2 idle, -1 mouse, >=0 touch ID
 var _scroll_start := Vector2.ZERO
 var _scroll_origin := 0
@@ -64,6 +67,12 @@ func _notification(what: int) -> void:
 
 func _ready() -> void:
 	visibility_changed.connect(_reset_touch)
+	$Shade.gui_input.connect(func(event: InputEvent):
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			close_requested.emit()
+			accept_event()
+	)
+
 	$Card/PreviewFrame/SceneCapturePreview.resized.connect(_update_preview_mask)
 	_update_preview_mask()
 
@@ -78,3 +87,14 @@ func _reset_touch() -> void:
 	_scroll_pointer = -2
 	_scroll_dragging = false
 	_scroll_start = Vector2.ZERO
+
+
+func animate_open() -> void:
+	if _open_tween != null:
+		_open_tween.kill()
+	$Card.pivot_offset = $Card.size * 0.5
+	$Card.scale = Vector2.ZERO
+	_open_tween = create_tween()
+	_open_tween.tween_property($Card, "scale", Vector2.ONE * 1.035, 0.36).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_open_tween.tween_property($Card, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	await _open_tween.finished

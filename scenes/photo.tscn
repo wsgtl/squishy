@@ -18,6 +18,8 @@
 
 [ext_resource type="Texture2D" path="res://res/ui/photo/btn_save_click.png" id="save_pressed"]
 
+[ext_resource type="Texture2D" path="res://res/ui/photo/share_more.png" id="share_more"]
+
 [sub_resource type="AtlasTexture" id="save_pressed_fitted"]
 atlas = ExtResource("save_pressed")
 region = Rect2(50, 72, 875, 165)
@@ -56,6 +58,7 @@ anchor_left = 0.055
 anchor_top = 0.115
 anchor_right = 0.945
 anchor_bottom = 0.96
+mouse_filter = 0
 
 [node name="Background" type="TextureRect" parent="Card" unique_id=1384522385]
 layout_mode = 1
@@ -165,7 +168,6 @@ theme_override_constants/separation = 16
 custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
 size_flags_vertical = 4
-tooltip_text = "X"
 focus_mode = 0
 mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
@@ -202,7 +204,6 @@ script = ExtResource("anim")
 custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
 size_flags_vertical = 4
-tooltip_text = "LINE"
 focus_mode = 0
 mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
@@ -235,11 +236,47 @@ stretch_mode = 5
 [node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/LINEShareButton" unique_id=1344235583]
 script = ExtResource("anim")
 
-[node name="InstagramShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=683469021]
+[node name="MoreShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms"]
 custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
 size_flags_vertical = 4
-tooltip_text = "Instagram"
+focus_mode = 0
+mouse_filter = 1
+theme_override_styles/normal = SubResource("empty")
+theme_override_styles/pressed = SubResource("empty")
+theme_override_styles/hover = SubResource("empty")
+theme_override_styles/disabled = SubResource("empty")
+theme_override_styles/focus = SubResource("empty")
+
+[node name="PlatformBase" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/MoreShareButton"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = ExtResource("platform_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Background" type="TextureRect" parent="Card/ShareFrame/ShareScroll/Platforms/MoreShareButton"]
+layout_mode = 1
+anchors_preset = 15
+anchor_left = 0.20
+anchor_top = 0.20
+anchor_right = 0.80
+anchor_bottom = 0.80
+mouse_filter = 2
+texture = ExtResource("share_more")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PressAnimation" type="Node" parent="Card/ShareFrame/ShareScroll/Platforms/MoreShareButton"]
+script = ExtResource("anim")
+
+[node name="InstagramShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=683469021]
+visible = false
+custom_minimum_size = Vector2(112, 112)
+layout_mode = 2
+size_flags_vertical = 4
 focus_mode = 0
 mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
@@ -273,10 +310,10 @@ stretch_mode = 5
 script = ExtResource("anim")
 
 [node name="TikTokShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=1103016903]
+visible = false
 custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
 size_flags_vertical = 4
-tooltip_text = "TikTok"
 focus_mode = 0
 mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")
@@ -310,10 +347,10 @@ stretch_mode = 5
 script = ExtResource("anim")
 
 [node name="KakaoShareButton" type="Button" parent="Card/ShareFrame/ShareScroll/Platforms" unique_id=170805328]
+visible = false
 custom_minimum_size = Vector2(112, 112)
 layout_mode = 2
 size_flags_vertical = 4
-tooltip_text = "Kakao"
 focus_mode = 0
 mouse_filter = 1
 theme_override_styles/normal = SubResource("empty")

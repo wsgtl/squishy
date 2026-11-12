@@ -493,7 +493,7 @@ func _twist_offset(p: Vector3) -> Vector3:
 	var radial := c - _twist_axis * axial
 	var amount := grip_amount * twist_deformation_scale
 	var waist := 1.0 - t * t
-	var angle := _twist_direction * deg_to_rad(105.0) * sin(t * PI * 0.5) * amount
+	var angle := _twist_direction * deg_to_rad(105.0) * float(material_profile.get("twist_angle_scale", 1.0)) * sin(t * PI * 0.5) * amount
 	# Broad waist compression and rounded end bulges; wrinkles follow a helix.
 	var ends := smoothstep(0.25, 0.90, absf(t))
 	var side := _twist_axis.cross(Vector3.UP).normalized()
@@ -512,7 +512,7 @@ func _twist_offset(p: Vector3) -> Vector3:
 	var depth := 0.76 + 0.24 * sin(theta - 4.1 * t)
 	var local_fold := 0.5 + 0.5 * sin(2.0 * theta + 5.7 * t + 0.8)
 	var wave := (0.065 + 0.045 * ends) * sin(phase) * depth + 0.045 * waist * sin(secondary) * local_fold + 0.022 * waist * waist * sin(fine)
-	var wrinkle := wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, absf(t))) * pow(maxf(amount, 0.0), 1.5)
+	var wrinkle := float(material_profile.get("twist_wrinkle_scale", 1.0)) * wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, absf(t))) * pow(maxf(amount, 0.0), 1.5)
 	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * amount + wrinkle
 	var rotated := radial * cos(angle) + _twist_axis.cross(radial) * sin(angle)
 	var result := rotated + _twist_axis * axial * (1.0 + 0.06 * amount) - c
@@ -524,6 +524,17 @@ func set_grip_held(held: bool) -> void:
 	_grip_held = held
 	if not held:
 		_stop_grip_haptic()
+
+func play_model_arrival() -> void:
+	# A small compression impulse uses the same deformation and recovery as play.
+	cancel_grip()
+	_twist_mode = false
+	_flatten_mode = true
+	grip_amount = 0.015
+	_grip_velocity = 1.8
+	_cpu_dirty = true
+	_pick_dirty = true
+	_sync_gpu()
 
 func begin_flatten() -> void:
 	if is_grip_held(): return
@@ -1113,7 +1124,7 @@ func _setup_gpu() -> void:
 			_shader_material.set_shader_parameter("albedo_texture", source.albedo_texture)
 			_shader_material.set_shader_parameter("has_albedo_texture", true)
 	# Apply only supported surface settings to this instance, never the GLB resource.
-	for parameter in ["material_roughness", "material_specular", "normal_strength"]:
+	for parameter in ["material_roughness", "material_specular", "normal_strength", "albedo_brightness", "twist_angle_scale", "twist_wrinkle_scale"]:
 		if material_profile.has(parameter):
 			_shader_material.set_shader_parameter(parameter, clampf(float(material_profile[parameter]), 0.0, 1.0))
 	instance.material_override = _shader_material
