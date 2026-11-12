@@ -186,7 +186,7 @@ corner_radius_bottom_right = 8
 
 [sub_resource type="AtlasTexture" id="tool_pill"]
 atlas = ExtResource("selected_tool")
-region = Rect2(75, 20, 380, 145)
+region = Rect2(86, 19, 350, 139)
 
 [sub_resource type="AtlasTexture" id="clear_pill"]
 atlas = ExtResource("a18")
@@ -282,7 +282,7 @@ mouse_filter = 2
 layout_mode = 0
 offset_left = 44.0
 offset_top = 48.0
-offset_right = 242.0
+offset_right = 242.6667
 offset_bottom = 118.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
@@ -300,10 +300,10 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 0
 visible = false
-offset_left = -10.0
-offset_right = 10.0
-offset_top = -9.0
-offset_bottom = 9.0
+offset_left = -8.0
+offset_right = 8.0
+offset_top = -8.0
+offset_bottom = 8.0
 
 [node name="Content" type="CenterContainer" parent="Tools/Brush"]
 layout_mode = 1
@@ -335,9 +335,9 @@ theme_override_font_sizes/font_size = 28
 
 [node name="Sticker" type="Button" parent="Tools"]
 layout_mode = 0
-offset_left = 242.0
+offset_left = 242.6667
 offset_top = 48.0
-offset_right = 440.0
+offset_right = 441.3333
 offset_bottom = 118.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
@@ -355,10 +355,10 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 0
 visible = false
-offset_left = -10.0
-offset_right = 10.0
-offset_top = -9.0
-offset_bottom = 9.0
+offset_left = -8.0
+offset_right = 8.0
+offset_top = -8.0
+offset_bottom = 8.0
 
 [node name="Content" type="CenterContainer" parent="Tools/Sticker"]
 layout_mode = 1
@@ -390,9 +390,9 @@ theme_override_font_sizes/font_size = 28
 
 [node name="Eraser" type="Button" parent="Tools"]
 layout_mode = 0
-offset_left = 440.0
+offset_left = 441.3333
 offset_top = 48.0
-offset_right = 638.0
+offset_right = 640.0
 offset_bottom = 118.0
 focus_mode = 0
 theme_override_styles/normal = SubResource("empty")
@@ -410,10 +410,10 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 0
 visible = false
-offset_left = -10.0
-offset_right = 10.0
-offset_top = -9.0
-offset_bottom = 9.0
+offset_left = -8.0
+offset_right = 8.0
+offset_top = -8.0
+offset_bottom = 8.0
 
 [node name="Content" type="CenterContainer" parent="Tools/Eraser"]
 layout_mode = 1

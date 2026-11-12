@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://cf5u8xs28832t"]
 
 [ext_resource type="Texture2D" uid="uid://dkdbtcgsmlird" path="res://res/ui/home/logo_punikko.png" id="brand"]
-[ext_resource type="PackedScene" path="res://scenes/confirm.tscn" id="brand_confirm"]
 [ext_resource type="Texture2D" uid="uid://cbf3ygkk00uia" path="res://res/ui/home/card_chewy.png" id="chewy"]
 [ext_resource type="Texture2D" uid="uid://oaiyuxwpp57n" path="res://res/ui/home/feel_chewy.png" id="chewy_icon"]
 [ext_resource type="Texture2D" uid="uid://bypmxpcv8qvsl" path="res://res/ui/home/btn_confirm.png" id="confirm"]
@@ -22,6 +21,12 @@
 
 [ext_resource type="Texture2D" path="res://res/ui/photo/btn_save.png" id="start_normal"]
 [ext_resource type="Texture2D" path="res://res/ui/photo/btn_save_click.png" id="start_pressed"]
+
+[ext_resource type="Texture2D" path="res://res/ui/home/logo_punikko_click.png" id="brand_pressed"]
+
+[sub_resource type="AtlasTexture" id="brand_pressed_fitted"]
+atlas = ExtResource("brand_pressed")
+region = Rect2(9, 9, 308, 192)
 
 [sub_resource type="AtlasTexture" id="start_normal_fitted"]
 atlas = ExtResource("start_normal")
@@ -55,8 +60,12 @@ offset_top = 30.0
 offset_right = 230.0
 offset_bottom = 154.0
 texture_normal = ExtResource("brand")
+texture_pressed = SubResource("brand_pressed_fitted")
 ignore_texture_size = true
 stretch_mode = 5
+
+[node name="PressAnimation" type="Node" parent="Logo"]
+script = ExtResource("press_animation")
 
 [node name="TitleLogo" type="TextureRect" parent="." unique_id=2035596224]
 layout_mode = 0
@@ -380,6 +389,3 @@ vertical_alignment = 1
 [node name="PressAnimation" type="Node" parent="StartSquishingButton" unique_id=611064014]
 script = ExtResource("press_animation")
 pressed_texture = SubResource("start_pressed_fitted")
-
-[node name="BrandConfirm" parent="." unique_id=1444215084 instance=ExtResource("brand_confirm")]
-anchors_preset = 15

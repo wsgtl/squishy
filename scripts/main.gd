@@ -141,6 +141,7 @@ func _game_back() -> void:
 		_return_home()
 
 func _ready() -> void:
+	_boot_stage("scene_ready")
 	get_window().title = "描いて！握って！ぷにっこスクイーズ"
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("""
@@ -163,8 +164,10 @@ func _ready() -> void:
 	_build_environment()
 	_build_stage()
 	_build_blob()
+	_boot_stage("model_ready")
 	_default_model_rotation = _model_root.quaternion
 	_build_hud()
+	_boot_stage("hud_ready")
 	_blob.set_doodle_texture(_doodle.texture)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -173,6 +176,16 @@ func _ready() -> void:
 	_home.setup(self, _cjk_font)
 	_hud_root.hide()
 	LocaleManager.language_changed.connect(_refresh_language)
+	_report_boot_frame.call_deferred()
+
+func _boot_stage(stage: String) -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("window.punikkoBootStage && window.punikkoBootStage(%s)" % JSON.stringify(stage))
+
+func _report_boot_frame() -> void:
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	_boot_stage("first_frame")
 
 func _refresh_language() -> void:
 	_load_font()

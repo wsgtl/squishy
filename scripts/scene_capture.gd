@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 # A one-shot 3D viewport shares the world, never the UI canvas.
+const PHOTO_LOGO = preload("res://res/ui/home/logo_punikko.png")
 const MAX_EDGE := 4096
 const WEB_MAX_EDGE := 1280
 var host: Node3D
@@ -184,9 +185,11 @@ func capture_scene() -> void:
 	if captured != null and not captured.is_empty():
 		captured.convert(Image.FORMAT_RGB8)
 		filename = "punikko-" + Time.get_datetime_string_from_system().replace(":", "-") + ".jpg"
-		var thumbnail := captured.duplicate() as Image
+		var thumbnail := crop_center(captured, preview.size)
 		var scale := minf(1.0, 960.0 / maxf(thumbnail.get_width(), thumbnail.get_height()))
 		thumbnail.resize(maxi(1, roundi(thumbnail.get_width() * scale)), maxi(1, roundi(thumbnail.get_height() * scale)), Image.INTERPOLATE_LANCZOS)
+		_stamp_photo_logo(thumbnail)
+		_stamp_photo_logo(captured)
 		preview.texture = ImageTexture.create_from_image(thumbnail)
 		_capture_log("capture.preview_ready", {"elapsed_ms": Time.get_ticks_msec() - capture_started, "size": str(captured.get_size())})
 		await overlay.animate_open()
@@ -216,6 +219,20 @@ func capture_scene() -> void:
 		_prepare_web_image()
 		_sync_web_share_targets()
 		_sync_web_share_targets.call_deferred()
+
+func _stamp_photo_logo(image: Image) -> void:
+	# Composite into pixels so downloads and native sharing keep the branding.
+	var logo: Image = PHOTO_LOGO.get_image()
+	if logo.is_compressed():
+		logo.decompress()
+	logo.convert(Image.FORMAT_RGBA8)
+	var width := maxi(1, roundi(image.get_width() * 0.20))
+	var height := maxi(1, roundi(width * float(logo.get_height()) / logo.get_width()))
+	logo.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	var margin := maxi(8, roundi(mini(image.get_width(), image.get_height()) * 0.035))
+	image.convert(Image.FORMAT_RGBA8)
+	image.blend_rect(logo, Rect2i(Vector2i.ZERO, logo.get_size()), Vector2i(margin, margin))
+	image.convert(Image.FORMAT_RGB8)
 
 func _encode_capture_jpeg(source: Image) -> PackedByteArray:
 	var native_started := Time.get_ticks_msec()

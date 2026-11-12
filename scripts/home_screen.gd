@@ -19,8 +19,7 @@ func setup(scene: Node3D, font: Font) -> void:
 	language.visible = LocaleManager.language_selection_allowed()
 	language.pressed.connect(func(): LocaleManager.set_language("zh" if TranslationServer.get_locale().begins_with("ja") else "ja"))
 	$StartSquishingButton.pressed.connect(host._start_game)
-	$Logo.pressed.connect(func(): $BrandConfirm.open("即将离开游戏，前往 PUNIKKO 官网？"))
-	$BrandConfirm.confirmed.connect(_open_brand_site)
+	$Logo.pressed.connect(_open_brand_site)
 	$SoundButton.toggled.connect(_set_sound)
 	$SoundButton.set_pressed_no_signal(not AudioServer.is_bus_mute(0))
 	for i in range(Presets.TYPES.size()):

@@ -114,6 +114,8 @@ body {
 		<div id="status">
 			<div id="loading-brand"><img id="status-splash" src="$GODOT_SPLASH" alt=""><div id="loading-title">描いて！握って！<br>ぷにっこスクイーズ</div></div>
 			<progress id="status-progress"></progress>
+<div id="boot-detail" style="position:absolute;bottom:16%;color:#79668f;font:14px system-ui;text-align:center;padding:12px">読み込み中…</div>
+<button id="boot-retry" style="display:none;position:absolute;bottom:3%;padding:10px 20px;border:0;border-radius:20px;background:#ed8fb7;color:white">再読み込み</button>
 			<div id="status-notice"></div>
 		</div>
 
@@ -130,6 +132,33 @@ const engine = new Engine(GODOT_CONFIG);
 
 	let initializing = true;
 	let statusMode = '';
+	const detail=document.getElementById('boot-detail'), retry=document.getElementById('boot-retry');
+	let locale=(navigator.language||'').toLowerCase().startsWith('zh')?'zh':'ja';
+	// Match the game's policy: other system languages default to Japanese.
+	if(locale==='zh'){
+		try{const saved=localStorage.getItem('punikko.language');if(saved==='zh'||saved==='ja')locale=saved;}catch(e){}
+	}
+	const zh=locale==='zh';
+	document.documentElement.lang=zh?'zh-CN':'ja';
+	detail.textContent=zh?'正在加载游戏…':'読み込み中…';
+	let lastProgress=Date.now(), lastBytes=-1;
+	const bootRows=[];
+	window.punikkoBootStage=(stage)=>{
+		bootRows.push({time:Date.now(),stage});
+		try{sessionStorage.setItem('punikko.bootLog',JSON.stringify(bootRows));}catch(e){}
+		lastProgress=Date.now();
+		detail.textContent=zh?'正在启动游戏…':'ゲームを起動しています…';
+		if(stage==='first_frame'){setStatusMode('hidden');}
+	};
+	retry.textContent=zh?'重新加载':'再読み込み';
+	retry.onclick=()=>location.reload();
+	const watchdog=setInterval(()=>{
+		if(!initializing){clearInterval(watchdog);return;}
+		if(Date.now()-lastProgress>30000){
+			detail.textContent=zh?'启动时间较长，可稍候或重新加载':'起動に時間がかかっています。待つか再読み込みしてください。';
+			retry.style.display='block';
+		}
+	},1000);
 
 	function setStatusMode(mode) {
 		if (statusMode === mode || !initializing) {
@@ -159,6 +188,8 @@ const engine = new Engine(GODOT_CONFIG);
 
 	function displayFailureNotice(err) {
 		console.error(err);
+		retry.style.display='block';
+		window.punikkoBootStage('error: '+String(err));
 		if (err instanceof Error) {
 			setStatusNotice(err.message);
 		} else if (typeof err === 'string') {
@@ -210,15 +241,17 @@ const engine = new Engine(GODOT_CONFIG);
 		engine.startGame({
 			'onProgress': function (current, total) {
 				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
+					statusProgress.value = Math.min(90,current/total*90);
+					statusProgress.max = 100;
+					if(current!==lastBytes){lastBytes=current;lastProgress=Date.now();}
+					detail.textContent=current>=total?(zh?'下载完成，正在初始化…':'ダウンロード完了。初期化中…'):(zh?'正在下载游戏…':'ダウンロード中…');
 				} else {
 					statusProgress.removeAttribute('value');
 					statusProgress.removeAttribute('max');
 				}
 			},
 		}).then(() => {
-			setStatusMode('hidden');
+			window.punikkoBootStage('engine_started');
 		}, displayFailureNotice);
 	}
 }());

@@ -93,7 +93,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 texture = SubResource("confirm_button")
 expand_mode = 1
-stretch_mode = 0
+stretch_mode = 5
 mouse_filter = 2
 
 [node name="Caption" type="Label" parent="Card/Confirm"]
@@ -129,7 +129,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 texture = SubResource("cancel_button")
 expand_mode = 1
-stretch_mode = 0
+stretch_mode = 5
 mouse_filter = 2
 
 [node name="Caption" type="Label" parent="Card/Cancel"]

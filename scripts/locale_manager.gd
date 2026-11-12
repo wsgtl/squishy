@@ -30,7 +30,17 @@ func _enter_tree() -> void:
 		var saved := str(settings.get_value("language", "selection", "auto"))
 		if saved in OPTIONS:
 			preference = saved
+	if OS.has_feature("web"):
+		if language_selection_allowed():
+			var web_saved = JavaScriptBridge.eval("(() => {try{return localStorage.getItem('punikko.language');}catch(e){return null;}})()")
+			if web_saved is String and web_saved in OPTIONS:
+				preference = web_saved
+		_sync_web_language()
 	TranslationServer.set_locale(preference)
+
+func _sync_web_language() -> void:
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("try { localStorage.setItem('punikko.language', %s); } catch(e) {}" % JSON.stringify(preference))
 
 func set_language(selection: String, persist := true) -> void:
 	if selection not in OPTIONS:
@@ -42,6 +52,7 @@ func set_language(selection: String, persist := true) -> void:
 		var settings := ConfigFile.new()
 		settings.set_value("language", "selection", preference)
 		settings.save(SETTINGS_PATH)
+		_sync_web_language()
 	TranslationServer.set_locale(preference)
 	language_changed.emit()
 
