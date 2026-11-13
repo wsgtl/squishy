@@ -50,12 +50,19 @@ uniform float grip_width = 1.0;
 uniform float grip_hand_half_width = 0.27;
 uniform float squash_amount = 0.0;
 uniform float press_depth = 0.32;
+uniform float press_depth_scale = 1.0;
 uniform float finger_width = 0.138;
 uniform float softness = 0.9;
 uniform float squash_strength = 0.10;
 uniform vec3 pull = vec3(0.0);
 uniform vec3 stretch_axis = vec3(1.0, 0.0, 0.0);
 uniform float stretch_amount = 0.0;
+uniform float twist_extra_length = 0.0;
+uniform float twist_end_angle = 0.0;
+uniform float grip_waist_scale = 1.0;
+uniform float grip_end_scale = 1.0;
+uniform float stretch_end_lift = 0.0;
+uniform float stretch_neck_strength = 0.82;
 uniform vec4 stretch_shape = vec4(1.0, 0.0, 1.0, 1.0);
 
 uniform vec3 grab_point_a;
@@ -81,21 +88,31 @@ vec3 dent_at(vec3 p, vec3 point, vec3 normal, float amount) {
 	float dent = exp(-radial_sq * 0.5);
 	float rim = radial_sq * dent * 0.06;
 	float depth = min(press_depth * model_radius * 1.5, min(dot(model_size, abs(normal)) * 0.45, sigma * 1.5));
+	depth = min(depth * press_depth_scale, dot(model_size, abs(normal)) * 0.82);
 	if (!raised_rim_press) {
 		return normal * (rim - dent) * depth * clamp(amount, -0.1, 1.0) * depth_mask;
 	}
 	depth = min(press_depth * model_radius * 2.1, min(dot(model_size, abs(normal)) * 0.63, sigma * 2.1));
+	depth = min(depth * press_depth_scale, dot(model_size, abs(normal)) * 0.82);
 	float bottom = model_center.y - model_size.y * 0.5;
 	float height = clamp((p.y - bottom) / max(model_size.y, 0.000001), 0.0, 1.0);
 	float base_mask = smoothstep(0.0, 0.65, height);
 	float gather_radius = model_radius * 0.85;
-	float broad = exp(-dot(tangent, tangent) / (2.0 * gather_radius * gather_radius));
+	vec3 planar = vec3(relative.x, 0.0, relative.z);
+	float broad = exp(-dot(planar, planar) / (2.0 * gather_radius * gather_radius));
 	vec2 normalized_position = (p.xz - model_center.xz) / max(model_size.xz * 0.5, vec2(0.000001));
 	float edge = smoothstep(0.50, 0.95, length(normalized_position));
 	float pressure = clamp(amount, 0.0, 1.0);
-	vec3 inward = -tangent * 0.24 * broad * pressure * base_mask;
-	vec3 curl = vec3(0.0, (depth / 1.4) * 0.70 * edge * broad * pressure * base_mask * abs(normal.y), 0.0);
-	return -normal * dent * depth * pressure * depth_mask * base_mask + inward + curl;
+	float indentation = depth * pressure;
+	float spread_strength = indentation / max(model_radius, 0.000001);
+	float round_profile = pow(max(sin(3.14159265359 * height), 0.0), 2.0);
+	float spread_radius = max(model_radius * 0.55, 0.000001);
+	float core_radius = max(sigma * 0.25, 0.000001);
+	vec3 spread_direction = planar / sqrt(dot(planar, planar) + core_radius * core_radius);
+	float spread_falloff = exp(-dot(planar, planar) / (2.0 * spread_radius * spread_radius));
+	vec3 outward = spread_direction * model_radius * 0.65 * spread_strength * spread_falloff * (0.15 + 0.85 * round_profile);
+	vec3 curl = vec3(0.0, (depth / 1.4) * 0.14 * edge * broad * pressure * base_mask * abs(normal.y), 0.0);
+	return -normal * dent * depth * pressure * depth_mask * base_mask + outward + curl;
 }
 
 vec3 grab_dent(vec3 p, vec3 point, vec3 normal) {
@@ -128,6 +145,7 @@ vec3 twist_offset(vec3 p) {
 	vec3 radial = c - twist_axis * axial;
 	float waist = 1.0 - t * t;
 	float angle = twist_direction * twist_angle_scale * 1.8325957146 * sin(t * 3.14159265359 * 0.5) * amount;
+	angle += twist_direction * sign(t) * twist_end_angle * smoothstep(0.5, 1.0, abs(t)) * amount;
 	float ends = smoothstep(0.25, 0.90, abs(t));
 	vec3 side = normalize(cross(twist_axis, vec3(0.0, 1.0, 0.0)));
 	float side_extent = max(abs(side.x) * model_size.x * 0.5 + abs(side.z) * model_size.z * 0.5, 0.000001);
@@ -148,7 +166,7 @@ vec3 twist_offset(vec3 p) {
 	float wrinkle = twist_wrinkle_scale * wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, abs(t))) * pow(max(amount, 0.0), 1.5);
 	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * amount + wrinkle;
 	vec3 rotated = radial * cos(angle) + cross(twist_axis, radial) * sin(angle);
-	vec3 result = rotated + twist_axis * axial * (1.0 + 0.06 * amount) - c;
+	vec3 result = rotated + twist_axis * axial * (1.0 + 0.06 * amount) * (1.0 + twist_extra_length * clamp(amount, 0.0, 1.0)) - c;
 	result.y += model_radius * 1.8 * smoothstep(0.0, 1.0, grip_stage);
 	return result + grip_axis * grip_shake + cross(grip_axis, vec3(0.0, 1.0, 0.0)) * grip_shake_vertical;
 }
@@ -206,9 +224,9 @@ vec3 grip_offset(vec3 p) {
 	float cap_x = clamp(nx, -1.0, 1.0);
 	float cap = 1.0 - cap_x * cap_x;
 	float fold = sin(hand_z * 3.14159265359 * 3.0 + y * 1.4) * 0.008 * waist * pressure;
-	vec3 offset = vec3(c.x * (-(0.406 + 0.112 * left) * waist * pose.x + 0.24 * round_end * pose.y) + c.x * fold + width * (0.12 * fingers - 0.16 * thumb),
-		c.y * (-0.336 * waist * pose.x + 0.60 * round_end * (0.65 + 0.35 * cap) * pose.y) + c.y * fold - model_size.y * (0.16 * fingers * smoothstep(-0.1, 0.65, y) + 0.46 * thumb),
-		c.z * smoothstep(1.0, 1.5, abs(hand_z)) * (0.12 + 0.12 * (1.0 - nz * nz) + 0.12 * cap) * pose.y - hand * 0.07 * thumb);
+	vec3 offset = vec3(c.x * (-(0.406 + 0.112 * left) * waist * pose.x * grip_waist_scale + 0.24 * round_end * pose.y * grip_end_scale) + c.x * fold + width * (0.12 * fingers - 0.16 * thumb),
+		c.y * (-0.336 * waist * pose.x * grip_waist_scale + 0.60 * round_end * (0.65 + 0.35 * cap) * pose.y * grip_end_scale) + c.y * fold - model_size.y * (0.16 * fingers * smoothstep(-0.1, 0.65, y) + 0.46 * thumb),
+		c.z * smoothstep(1.0, 1.5, abs(hand_z)) * (0.12 + 0.12 * (1.0 - nz * nz) + 0.12 * cap) * pose.y * grip_end_scale - hand * 0.07 * thumb);
 	// Opposing end roll and palm shear produce a twisted grip, not a rigid rotation.
 	vec3 deformed = c + offset;
 	float roll = 0.24 * clamp(c.z / hand, -1.0, 1.0) * pose.w;
@@ -292,7 +310,7 @@ vec3 deform(vec3 p, vec3 contact) {
 		float axis_position = along / half_extent;
 		float neck_weight = exp(-0.5 * (axis_position / 0.36) * (axis_position / 0.36));
 		float thin = mix(stretch_shape.w, 1.0, neck_strength * (1.0 - neck_weight));
-		thin = max(0.16, thin * (1.0 - 0.82 * neck_strength * neck_weight));
+		thin = max(0.16, thin * (1.0 - stretch_neck_strength * neck_strength * neck_weight));
 		float strain_profile = mix(axis_position, tanh(axis_position * 2.2) / tanh(2.2), neck_strength * 0.8);
 		float stretched_along = along + (factor - 1.0) * half_extent * strain_profile;
 		vec3 stretched = direction * stretched_along + (centered - direction * along) * thin;
@@ -305,6 +323,9 @@ vec3 deform(vec3 p, vec3 contact) {
 			height_scale = 1.0 + (thin - 1.0) * 1.75 * dome * dome;
 		}
 		stretched.y = bottom - model_center.y + (p.y - bottom) * height_scale;
+		float lift_weight = smoothstep(0.0, 1.5, max(strain, 0.0));
+		float lift_profile = (1.0 - exp(-3.0 * axis_position * axis_position)) / (1.0 - exp(-3.0));
+		stretched.y += model_radius * stretch_end_lift * lift_weight * lift_profile;
 		float grab_sigma = model_radius * (0.75 + softness * 0.25);
 		float grab = exp(-dot(relative, relative) / (2.0 * grab_sigma * grab_sigma));
 		offset += stretched - centered + pull * (0.10 + grab * 0.15);

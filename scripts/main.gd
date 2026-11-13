@@ -104,11 +104,14 @@ var _home_camera_dist: float = 4.5
 var _base_camera_dist: float = 4.5
 var _base_camera_y: float = 2.8
 var _look_at_target := Vector3(0.0, 1.0, 0.0)
+var _backdrop_ground: MeshInstance3D
 var _backdrop_material: ShaderMaterial
 var _board: Node3D
 var _board_source_size := Vector3(1.349289, 0.075418, 1.349289)
 var _board_source_center := Vector3.ZERO
-const BOARD_DIAMETER := MODEL_WIDTH * 1.65
+var _board_surface_y := 0.25
+const BOARD_DIAMETER := MODEL_WIDTH * 1.78
+const BOARD_HEIGHT_SCALE := 0.2
 
 # 字体
 var _cjk_font: FontFile
@@ -616,6 +619,7 @@ func _build_stage() -> void:
 	# Large ground carries the pink studio backdrop and analytic contact shadow.
 	# Keep it separate from the authored wood base.
 	var ground := MeshInstance3D.new()
+	_backdrop_ground = ground
 	var ground_mesh := PlaneMesh.new()
 	ground_mesh.size = Vector2(200.0, 200.0)
 	ground.mesh = ground_mesh
@@ -626,7 +630,7 @@ func _build_stage() -> void:
 	add_child(ground)
 
 	# Use the authored bottom model instead of generating a primitive cylinder.
-	var bottom_scene := load("res://glb/bottom.glb")
+	var bottom_scene := load("res://glb/pan_pink.glb")
 	if bottom_scene != null:
 		var imported_board := bottom_scene.instantiate() as Node3D
 		if imported_board != null:
@@ -635,10 +639,14 @@ func _build_stage() -> void:
 			_board.name = "Bottom"
 			add_child(_board)
 			_board.add_child(imported_board)
+			_adjust_board_materials(imported_board)
 			var bounds: AABB = _get_model_aabb(_board)
 			_board_source_size = bounds.size
 			_board_source_center = bounds.get_center()
 			_resize_board()
+			var surface_y := _find_board_center_surface(_board)
+			if is_finite(surface_y):
+				_board_surface_y = surface_y
 			return
 	# Fallback for projects where the authored asset is unavailable.
 	_board = MeshInstance3D.new()
@@ -654,6 +662,19 @@ func _build_stage() -> void:
 	add_child(_board)
 	_resize_board()
 
+func _adjust_board_materials(node: Node) -> void:
+	if node is MeshInstance3D:
+		for surface in range(node.mesh.get_surface_count()):
+			var source = node.get_active_material(surface)
+			if source is BaseMaterial3D:
+				var material := source.duplicate() as BaseMaterial3D
+				material.albedo_color *= Color(0.92, 0.92, 0.92, 1.0)
+				material.roughness = maxf(material.roughness, 0.8)
+				material.metallic_specular = 0.2
+				node.set_surface_override_material(surface, material)
+	for child in node.get_children():
+		_adjust_board_materials(child)
+
 func _resize_board() -> void:
 	if _board == null or _camera == null:
 		return
@@ -667,12 +688,32 @@ func _resize_board() -> void:
 			board_mesh.top_radius = target_diameter * 0.5
 			board_mesh.bottom_radius = target_diameter * 0.5
 		return
-	# The imported base keeps its authored proportions; only scale uniformly to
-	# maintain a stable margin around the normalized product.
+	# Keep the plate diameter while flattening its depth to reduce rim overlap.
 	var authored_diameter := maxf(maxf(_board_source_size.x, _board_source_size.z), 0.001)
-	_board.scale = Vector3.ONE * (target_diameter / authored_diameter)
+	_board.scale = Vector3(1.0, BOARD_HEIGHT_SCALE, 1.0) * (target_diameter / authored_diameter)
 	_board.position = -_board_source_center * _board.scale
 	_board.position.y += 0.25 - _board_source_size.y * _board.scale.y * 0.5
+	# Deep trays extend below the old flat base; keep the backdrop below all geometry.
+	if is_instance_valid(_backdrop_ground):
+		var board_bottom_y := 0.25 - _board_source_size.y * _board.scale.y
+		_backdrop_ground.position.y = minf(-0.035, board_bottom_y - 0.025)
+
+# Sample the actual plate interior, rather than placing the product on its rim.
+func _find_board_center_surface(node: Node) -> float:
+	var highest := -INF
+	if node is MeshInstance3D:
+		var mesh_node := node as MeshInstance3D
+		var faces := mesh_node.mesh.get_faces()
+		for i in range(0, faces.size(), 3):
+			var hit = Geometry3D.ray_intersects_triangle(Vector3(0, 10, 0), Vector3.DOWN,
+				mesh_node.global_transform * faces[i],
+				mesh_node.global_transform * faces[i + 1],
+				mesh_node.global_transform * faces[i + 2])
+			if hit != null:
+				highest = maxf(highest, hit.y)
+	for child in node.get_children():
+		highest = maxf(highest, _find_board_center_surface(child))
+	return highest
 
 func _calculate_screen_width_at_y(y: float) -> float:
 	if _camera == null:
@@ -721,8 +762,11 @@ func _build_blob() -> void:
 		# 计算模型 AABB 来确定正确位置
 		var aabb := _get_model_aabb(instance)
 		var model_bottom_y := aabb.position.y
-		var board_top_y := 0.12 + 0.13  # 底座位置 + 半高
-		instance.position = Vector3(0.0, board_top_y + MODEL_WIDTH * 0.0015 - model_bottom_y, 0.0)
+		var model_center := aabb.get_center()
+		var plate_offset := 0.0 if _active_model_path == "res://glb/fy.glb" else MODEL_WIDTH * 0.15
+		if _active_model_path == "res://glb/sfl.glb":
+			plate_offset = MODEL_WIDTH * 0.10
+		instance.position = Vector3(-model_center.x, _board_surface_y + MODEL_WIDTH * 0.004 - model_bottom_y, -model_center.z + plate_offset)
 		
 		_auto_focus_camera(instance)
 		_update_camera_position()
@@ -767,6 +811,9 @@ func _bake_model_transform(mesh_instance: MeshInstance3D) -> void:
 		arrays[Mesh.ARRAY_VERTEX] = vertices
 		arrays[Mesh.ARRAY_NORMAL] = normals
 		arrays[Mesh.ARRAY_TANGENT] = tangents
+		if _active_model_path == "res://glb/fy.glb":
+			var span := mesh_instance.get_aabb().size.length() * transform.basis.get_scale().length() / sqrt(3.0)
+			arrays = preload("res://scripts/mesh_refinement.gd").refine(arrays, span * 0.055)
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(surface, mesh_instance.get_active_material(surface))
 	mesh_instance.mesh = mesh

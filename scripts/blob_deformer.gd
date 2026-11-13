@@ -13,6 +13,7 @@ class_name BlobDeformer
 @export var softness: float = 0.9
 # 按压深度 (0.1-0.5, 默认0.32) - 按压最大深度
 @export var min_depth: float = 0.32
+@export var press_depth_scale := 1.0
 # 手指宽度 (0.072-0.216, 默认0.138，较原版缩小40%) - 接触区域大小
 @export var finger_width: float = 0.138
 # 弹性抖动 (0-1, 默认0.55) - 松手后的果冻感
@@ -21,6 +22,12 @@ class_name BlobDeformer
 @export var single_rebound := false
 @export var single_rebound_damping := 0.65
 @export var stretch_recovery_speed := 1.0
+@export var twist_extra_length := 0.0
+@export var twist_end_angle := 0.0
+@export var grip_waist_scale := 1.0
+@export var grip_end_scale := 1.0
+@export var rebound_speed_scale := 1.0
+@export var rebound_damping_override := -1.0
 @export var initial_bounce: float = 0.24
 # 拉伸灵敏度 (0.3-2.5, 默认1.3) - 拉动转化为形变的倍率
 @export var stretch_sensitivity: float = 1.3
@@ -278,11 +285,18 @@ func _make_picker(positions: PackedVector3Array) -> TriangleMesh:
 	picker.create_from_faces(faces)
 	return picker
 
+var _pick_updated_ms: int = -1000
+
 func _ensure_cpu_positions() -> void:
 	if not _cpu_dirty:
 		return
+	# UV and normal seams duplicate positions; evaluate the deformation only once.
+	var deformed_by_position := {}
 	for i in range(_rest_positions.size()):
-		_cpu_positions[i] = _rest_positions[i] + _target_offset_for(_rest_positions[i])
+		var rest := _rest_positions[i]
+		if not deformed_by_position.has(rest):
+			deformed_by_position[rest] = rest + _target_offset_for(rest)
+		_cpu_positions[i] = deformed_by_position[rest]
 	_cpu_dirty = false
 
 func pick_ray(world_origin: Vector3, world_direction: Vector3, stable_surface: bool = false) -> Dictionary:
@@ -290,9 +304,13 @@ func pick_ray(world_origin: Vector3, world_direction: Vector3, stable_surface: b
 	var origin := (mesh_node.to_local(world_origin) - _model_center) / _model_radius
 	var direction := (mesh_node.global_basis.inverse() * world_direction).normalized()
 	var picker := _rest_picker
-	if not stable_surface and _pick_dirty:
+	# Multiple input events can arrive between rendered frames. Reuse the last
+	# deformed picker for at most 33 ms instead of rebuilding its BVH per event.
+	var now_ms := Time.get_ticks_msec()
+	if not stable_surface and _pick_dirty and (_deformed_picker == null or now_ms - _pick_updated_ms >= 33):
 		_ensure_cpu_positions()
 		_deformed_picker = _make_picker(_cpu_positions)
+		_pick_updated_ms = now_ms
 		_pick_dirty = false
 	if not stable_surface and _deformed_picker != null:
 		picker = _deformed_picker
@@ -494,6 +512,8 @@ func _twist_offset(p: Vector3) -> Vector3:
 	var amount := grip_amount * twist_deformation_scale
 	var waist := 1.0 - t * t
 	var angle := _twist_direction * deg_to_rad(105.0) * float(material_profile.get("twist_angle_scale", 1.0)) * sin(t * PI * 0.5) * amount
+	# Preserve the middle half; add up to 20 degrees at each end with a smooth transition.
+	angle += _twist_direction * signf(t) * twist_end_angle * smoothstep(0.5, 1.0, absf(t)) * amount
 	# Broad waist compression and rounded end bulges; wrinkles follow a helix.
 	var ends := smoothstep(0.25, 0.90, absf(t))
 	var side := _twist_axis.cross(Vector3.UP).normalized()
@@ -515,7 +535,7 @@ func _twist_offset(p: Vector3) -> Vector3:
 	var wrinkle := float(material_profile.get("twist_wrinkle_scale", 1.0)) * wave * smoothstep(0.15, 0.9, rho) * (1.0 - smoothstep(0.90, 1.0, absf(t))) * pow(maxf(amount, 0.0), 1.5)
 	radial *= 1.0 + (-0.23 * waist + 0.20 * ends) * amount + wrinkle
 	var rotated := radial * cos(angle) + _twist_axis.cross(radial) * sin(angle)
-	var result := rotated + _twist_axis * axial * (1.0 + 0.06 * amount) - c
+	var result := rotated + _twist_axis * axial * (1.0 + 0.06 * amount) * (1.0 + twist_extra_length * clampf(amount, 0.0, 1.0)) - c
 	result.y += _model_radius * 1.8 * smoothstep(0.0, 1.0, grip_stage)
 	return result + _grip_axis * _grip_shake + _grip_axis.cross(Vector3.UP) * _grip_shake_vertical
 
@@ -566,9 +586,11 @@ func is_gripping() -> bool:
 	return _grip_held or grip_stage > 0.0001 or absf(grip_amount) + absf(_grip_velocity) > 0.0001
 
 func _material_rebound_omega() -> float:
-	return (6.0 if single_rebound else lerpf(8.0,14.0,elasticity))/maxf(recovery_time,0.3)
+	return rebound_speed_scale * (6.0 if single_rebound else lerpf(8.0,14.0,elasticity))/maxf(recovery_time,0.3)
 
 func _material_rebound_damping(value: float, velocity: float) -> float:
+	if rebound_damping_override >= 0.0:
+		return clampf(rebound_damping_override, 0.25, 1.0)
 	if single_rebound:
 		return 1.0 if value<0.0 and velocity>=0.0 else single_rebound_damping
 	return clampf(0.85-elasticity*0.65-initial_bounce*0.15,0.25,0.85)
@@ -576,8 +598,8 @@ func _material_rebound_damping(value: float, velocity: float) -> float:
 func _step_grip(delta: float) -> void:
 	if not is_gripping():
 		return
-	var recovery := clampf(recovery_time, 0.3, 4.0)
-	grip_stage = move_toward(grip_stage, 1.0 if _grip_held else 0.0, minf(delta, 0.1) / (0.65 if _grip_held else maxf(0.65, recovery * 0.65)))
+	# Lift/landing timing is shared by all feels; only shape recovery uses the spring.
+	grip_stage = move_toward(grip_stage, 1.0 if _grip_held else 0.0, minf(delta, 0.1) / 0.65)
 	var steps := maxi(1, ceili(minf(delta, 0.1) * 120.0))
 	var dt := minf(delta, 0.1) / steps
 	# Keep normalized hold progress for the camera and limit shake; only the
@@ -723,9 +745,9 @@ func _grip_offset(p: Vector3) -> Vector3:
 	var round_end := ends * (1.0 - 0.30 * nz * nz)
 	var cap := 1.0 - pow(clampf(nx, -1.0, 1.0), 2.0)
 	var fold := sin(hand_z * PI * 3.0 + y * 1.4) * 0.008 * waist * pressure
-	var offset := Vector3(c.x * (-(0.406 + 0.112 * left) * waist * pose.x + 0.24 * round_end * pose.y) + c.x * fold + width * (0.12 * fingers - 0.16 * thumb),
-		c.y * (-0.336 * waist * pose.x + 0.60 * round_end * (0.65 + 0.35 * cap) * pose.y) + c.y * fold - _model_size.y * (0.16 * fingers * smoothstep(-0.1, 0.65, y) + 0.46 * thumb),
-		c.z * smoothstep(1.0, 1.5, absf(hand_z)) * (0.12 + 0.12 * (1.0 - nz * nz) + 0.12 * cap) * pose.y - hand * 0.07 * thumb)
+	var offset := Vector3(c.x * (-(0.406 + 0.112 * left) * waist * pose.x * grip_waist_scale + 0.24 * round_end * pose.y * grip_end_scale) + c.x * fold + width * (0.12 * fingers - 0.16 * thumb),
+		c.y * (-0.336 * waist * pose.x * grip_waist_scale + 0.60 * round_end * (0.65 + 0.35 * cap) * pose.y * grip_end_scale) + c.y * fold - _model_size.y * (0.16 * fingers * smoothstep(-0.1, 0.65, y) + 0.46 * thumb),
+		c.z * smoothstep(1.0, 1.5, absf(hand_z)) * (0.12 + 0.12 * (1.0 - nz * nz) + 0.12 * cap) * pose.y * grip_end_scale - hand * 0.07 * thumb)
 	# Opposing end roll and palm shear produce a twisted grip, not a rigid rotation.
 	var deformed := c + offset
 	var roll := 0.24 * clampf(c.z / hand, -1.0, 1.0) * pose.w
@@ -877,24 +899,35 @@ func _dent_at(position: Vector3, point: Vector3, normal: Vector3, amount: float)
 	var rim := radial_sq * dent * 0.06
 	# Bound by both object thickness and contact width, even after long holds.
 	var depth := minf(min_depth * _model_radius * 1.5, minf(_model_size.dot(normal.abs()) * 0.45, sigma * 1.5))
+	depth = minf(depth * press_depth_scale, _model_size.dot(normal.abs()) * 0.82)
 	if not raised_rim_press:
 		return normal * (rim - dent) * depth * clampf(amount, -0.1, 1.0) * depth_mask
 	depth = minf(min_depth * _model_radius * 2.1, minf(_model_size.dot(normal.abs()) * 0.63, sigma * 2.1))
-	# Pull a broad patch toward the contact. Its outer silhouette curls upward
-	# instead of forming a raised ring around the finger.
+	depth = minf(depth * press_depth_scale, _model_size.dot(normal.abs()) * 0.82)
+	# Displace material outward in proportion to indentation depth for every feel.
 	var bottom := _model_center.y - _model_size.y * 0.5
 	var height := clampf((position.y - bottom) / maxf(_model_size.y, 0.000001), 0.0, 1.0)
 	var base_mask := smoothstep(0.0, 0.65, height)
 	var gather_radius := _model_radius * 0.85
-	var broad := exp(-tangent.length_squared() / (2.0 * gather_radius * gather_radius))
+	var planar := Vector3(relative.x, 0.0, relative.z)
+	var broad := exp(-planar.length_squared() / (2.0 * gather_radius * gather_radius))
 	var centered := position - _model_center
 	var nx := centered.x / maxf(_model_size.x * 0.5, 0.000001)
 	var nz := centered.z / maxf(_model_size.z * 0.5, 0.000001)
 	var edge := smoothstep(0.50, 0.95, sqrt(nx * nx + nz * nz))
 	var pressure := clampf(amount, 0.0, 1.0)
-	var inward := -tangent * 0.24 * broad * pressure * base_mask
-	var curl := Vector3.UP * (depth / 1.4) * 0.70 * edge * broad * pressure * base_mask * absf(normal.y)
-	return -normal * dent * depth * pressure * depth_mask * base_mask + inward + curl
+	var indentation := depth * pressure
+	var spread_strength := indentation / maxf(_model_radius, 0.000001)
+	var round_profile := pow(maxf(sin(PI * height), 0.0), 2.0)
+	# A softened direction avoids a singularity at the finger; outside that
+	# small core, displacement decreases with distance instead of growing with it.
+	var spread_radius := maxf(_model_radius * 0.55, 0.000001)
+	var core_radius := maxf(sigma * 0.25, 0.000001)
+	var spread_direction := planar / sqrt(planar.length_squared() + core_radius * core_radius)
+	var spread_falloff := exp(-planar.length_squared() / (2.0 * spread_radius * spread_radius))
+	var outward := spread_direction * _model_radius * 0.65 * spread_strength * spread_falloff * (0.15 + 0.85 * round_profile)
+	var curl := Vector3.UP * (depth / 1.4) * 0.14 * edge * broad * pressure * base_mask * absf(normal.y)
+	return -normal * dent * depth * pressure * depth_mask * base_mask + outward + curl
 
 func _grab_dent(position: Vector3, point: Vector3, normal: Vector3) -> Vector3:
 	var relative := position - point
@@ -976,7 +1009,7 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 		var axis_position := along / half_extent
 		var neck_weight := exp(-0.5 * pow(axis_position / 0.36, 2.0))
 		var thin := lerpf(1.0 / sqrt(factor), 1.0, neck_strength * (1.0 - neck_weight))
-		thin = maxf(0.16, thin * (1.0 - 0.82 * neck_strength * neck_weight))
+		thin = maxf(0.16, thin * (1.0 - float(material_profile.get("stretch_neck_strength", 0.82)) * neck_strength * neck_weight))
 		# This monotonic mapping lengthens the waist without reversing triangles
 		# along the pulling axis. Small pulls keep the previous uniform stretch.
 		var strain_profile := lerpf(axis_position, tanh(axis_position * 2.2) / tanh(2.2), neck_strength * 0.8)
@@ -994,6 +1027,11 @@ func _target_offset_for(rest_position: Vector3) -> Vector3:
 			var dome := pow(cos(nx * PI * 0.5) * cos(nz * PI * 0.5), 2.0)
 			height_scale = 1.0 + (thin - 1.0) * 1.75 * dome
 		stretched.y = bottom - _model_center.y + (rest_position.y - bottom) * height_scale
+		# Bend both ends upward smoothly, preserving thickness through each section.
+		var lift_weight := smoothstep(0.0, 1.5, maxf(strain, 0.0))
+		# Broad shoulders lift the inner sides as well as the tips; center slope stays zero.
+		var lift_profile := (1.0 - exp(-3.0 * axis_position * axis_position)) / (1.0 - exp(-3.0))
+		stretched.y += _model_radius * float(material_profile.get("stretch_end_lift", 0.0)) * lift_weight * lift_profile
 		var grab_sigma := _model_radius * (0.75 + softness * 0.25)
 		var grab := exp(-relative.length_squared() / (2.0 * grab_sigma * grab_sigma))
 		offset += stretched - centered + _smooth_pull * (0.10 + grab * 0.15)
@@ -1124,7 +1162,7 @@ func _setup_gpu() -> void:
 			_shader_material.set_shader_parameter("albedo_texture", source.albedo_texture)
 			_shader_material.set_shader_parameter("has_albedo_texture", true)
 	# Apply only supported surface settings to this instance, never the GLB resource.
-	for parameter in ["material_roughness", "material_specular", "normal_strength", "albedo_brightness", "twist_angle_scale", "twist_wrinkle_scale"]:
+	for parameter in ["material_roughness", "material_specular", "normal_strength", "albedo_brightness", "twist_angle_scale", "twist_wrinkle_scale", "stretch_end_lift", "stretch_neck_strength"]:
 		if material_profile.has(parameter):
 			_shader_material.set_shader_parameter(parameter, clampf(float(material_profile[parameter]), 0.0, 1.0))
 	instance.material_override = _shader_material
@@ -1146,6 +1184,10 @@ func _sync_gpu() -> void:
 	_shader_material.set_shader_parameter("twist_deformation_scale", twist_deformation_scale)
 	_shader_material.set_shader_parameter("grip_held", _grip_held)
 	_shader_material.set_shader_parameter("flatten_mode", _flatten_mode)
+	_shader_material.set_shader_parameter("twist_end_angle", twist_end_angle)
+	_shader_material.set_shader_parameter("twist_extra_length", twist_extra_length)
+	_shader_material.set_shader_parameter("grip_waist_scale", grip_waist_scale)
+	_shader_material.set_shader_parameter("grip_end_scale", grip_end_scale)
 	_shader_material.set_shader_parameter("flatten_strength", grip_deformation_scale)
 	_shader_material.set_shader_parameter("grip_amount", grip_amount)
 	_shader_material.set_shader_parameter("grip_pose", _grip_pose_parameters(grip_amount))
@@ -1170,6 +1212,7 @@ func _sync_gpu() -> void:
 	_shader_material.set_shader_parameter("press_amount", _press_amount)
 	_shader_material.set_shader_parameter("squash_amount", _squash_amount)
 	_shader_material.set_shader_parameter("press_depth", min_depth)
+	_shader_material.set_shader_parameter("press_depth_scale", press_depth_scale)
 	_shader_material.set_shader_parameter("finger_width", finger_width)
 	_shader_material.set_shader_parameter("softness", softness)
 	_shader_material.set_shader_parameter("squash_strength", squash_strength)

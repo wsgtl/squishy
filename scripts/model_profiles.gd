@@ -9,7 +9,7 @@ const DEFAULT_ROTATIONS := {
 # Surface calibration only; all products share the same scene lighting.
 # Keep the imported albedo/UVs untouched, including painted artwork.
 const MATERIAL_PROFILES := {
-	"res://glb/fy.glb": {"twist_angle_scale": 0.90, "twist_wrinkle_scale": 0.4},
+	"res://glb/fy.glb": {"twist_angle_scale": 0.90, "twist_wrinkle_scale": 0.4, "stretch_end_lift": 0.32, "stretch_neck_strength": 0.55},
 	"res://glb/banana.glb": {"albedo_brightness": 0.85, "material_roughness": 0.96, "material_specular": 0.10, "normal_strength": 0.55},
 	"res://glb/sfl.glb": {"material_roughness": 0.95, "material_specular": 0.18, "normal_strength": 0.75},
 	"res://glb/df.glb": {"material_roughness": 0.96, "material_specular": 0.16, "normal_strength": 0.55},

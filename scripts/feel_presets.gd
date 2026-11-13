@@ -16,9 +16,9 @@ static func model_path(index: int) -> String:
 
 # Shared material controls for every normal squish action.
 const RESPONSE := [
- {"limit":1.0,"recovery":1.3,"elasticity":0.75,"bounce":0.40,"single":false,"stretch_speed":1.0,"single_damping":0.65},
- {"limit":0.69444444,"recovery":2.1,"elasticity":0.18,"bounce":0.12,"single":true,"stretch_speed":1.3,"single_damping":0.58},
- {"limit":1.0,"recovery":1.04,"elasticity":0.8,"bounce":0.48,"single":false,"stretch_speed":1.0,"single_damping":0.65},
+ {"limit":1.0,"stretch_limit":2.88,"stretch_input":2.0,"rebound_speed":0.48,"rebound_damping":0.72,"press_depth":0.48,"press_duration":0.6,"recovery":2.4,"elasticity":0.75,"bounce":0.40,"single":false,"stretch_speed":1.0,"single_damping":0.65},
+ {"limit":0.69444444,"stretch_limit":1.4,"stretch_input":1.45,"rebound_speed":0.72,"press_depth":0.27777778,"press_duration":2.0,"recovery":2.8,"elasticity":0.18,"bounce":0.12,"single":true,"stretch_speed":1.0,"single_damping":0.58},
+ {"limit":1.0,"stretch_limit":1.05,"stretch_input":1.1,"rebound_speed":1.0,"press_depth":0.30,"press_duration":2.8,"recovery":1.04,"elasticity":0.8,"bounce":0.48,"single":false,"stretch_speed":1.0,"single_damping":0.65},
 ]
 
 static func parameters(index: int) -> Dictionary:
@@ -27,9 +27,16 @@ static func parameters(index: int) -> Dictionary:
  var response: Dictionary = RESPONSE[selected]
  var soft: float = type.soft/5.0
  var limit: float = response.limit
- return {"softness":1.6*soft,"min_depth":0.5*soft*limit,
+ return {"softness":1.6*soft,"min_depth":response.press_depth,"press_duration":response.press_duration,
+ "press_depth_scale":1.3 if selected == 0 else 1.0,
+ "twist_extra_length":0.30 if selected == 0 else 0.0,
+ "twist_end_angle":0.35 if selected == 0 else 0.0,
+ "grip_waist_scale":1.35 if selected == 0 else 1.0,
+ "grip_end_scale":1.55 if selected == 0 else 1.0,
  "grip_deformation_scale":soft/0.8*limit,"twist_deformation_scale":soft/0.8*limit,
- "stretch_sensitivity":2.5*soft,"max_stretch":3.6*soft*limit,
+ "stretch_sensitivity":response.stretch_input,"max_stretch":response.stretch_limit,
+ "rebound_speed_scale":response.rebound_speed,
+ "rebound_damping_override":response.get("rebound_damping", -1.0),
  "recovery_time":response.recovery,"elasticity":response.elasticity,
  "initial_bounce":response.bounce,"rebound_vibration":0.5*response.elasticity,
  "single_rebound":response.single,"single_rebound_damping":response.single_damping,

@@ -12,11 +12,10 @@ config_version=5
 
 config/name="描いて！握って！ぷにっこスクイーズ"
 run/main_scene="res://scenes/main.tscn"
-boot_splash/image="res://res/ui/browser_icon.png"
-boot_splash/bg_color=Color(0.9137255, 0.8745098, 1, 1)
-boot_splash/fullsize=false
-boot_splash/use_filter=true
 config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/bg_color=Color(0.9137255, 0.8745098, 1, 1)
+boot_splash/stretch_mode=0
+boot_splash/image="res://res/ui/browser_icon.png"
 config/icon="res://res/ui/browser_icon.png"
 
 [autoload]
